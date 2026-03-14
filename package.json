@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "node scripts/build.mjs",
     "check": "tsc --project tsconfig.json --noEmit"
   },
   "devDependencies": {
