@@ -1,3 +1,4 @@
+/* scrollbar colors match tailwind stone-200 / stone-300 */
 * {
     scrollbar-width: thin;
     scrollbar-color: #e3e3df transparent;
@@ -126,6 +127,7 @@
     opacity: 0.45;
 }
 
+/* drop indicator color matches tailwind stone-900 */
 .task-drop-before {
     box-shadow: inset 0 3px 0 0 #111111;
 }
@@ -206,8 +208,29 @@
     animation: float-celebration 4s ease-in-out infinite;
 }
 
-textarea {
-    field-sizing: content;
+@keyframes toastIn {
+    0% { opacity: 0; transform: translateY(8px) scale(0.96); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes toastOut {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-4px) scale(0.96); }
+}
+
+.toast {
+    animation: toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+    pointer-events: auto;
+}
+
+.toast-leaving {
+    animation: toastOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@supports (field-sizing: content) {
+    textarea {
+        field-sizing: content;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

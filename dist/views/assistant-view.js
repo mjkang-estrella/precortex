@@ -5,7 +5,7 @@ function renderMessages({ messages, senderLabel, aiMessages }) {
         if (message.sender === "user") {
             return `
                     <div class="flex flex-col items-end max-w-[90%] self-end">
-                        <div class="text-[11px] font-semibold text-stone-400 mb-1.5 lowercase pr-1">you</div>
+                        <div class="text-[11px] font-semibold text-stone-500 mb-1.5 lowercase pr-1">you</div>
                         <div class="bg-stone-900 text-white px-5 py-3.5 rounded-[20px] rounded-tr-[4px] text-[14px] leading-relaxed">
                             ${escapeHtml(message.text)}
                         </div>
@@ -35,8 +35,8 @@ function renderMessages({ messages, senderLabel, aiMessages }) {
             : `<div class="lowercase">${message.text}</div>`;
         return `
                 <div class="flex flex-col items-start max-w-[95%]">
-                    <div class="text-[11px] font-semibold text-stone-400 mb-1.5 lowercase pl-1">${escapeHtml(senderLabel)}</div>
-                    <div class="bg-stone-100 text-stone-800 px-5 py-4 rounded-[24px] rounded-tl-[4px] text-[14px] leading-relaxed border border-stone-200/50 w-full">
+                    <div class="text-[11px] font-semibold text-stone-500 mb-1.5 lowercase pl-1">${escapeHtml(senderLabel)}</div>
+                    <div class="bg-stone-100 text-stone-800 px-5 py-4 rounded-3xl rounded-tl-[4px] text-[14px] leading-relaxed border border-stone-200/50 w-full">
                         ${body}
                     </div>
                 </div>

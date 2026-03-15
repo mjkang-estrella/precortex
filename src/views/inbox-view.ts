@@ -6,14 +6,14 @@ function renderInboxMetadata(task) {
 
     if (task.sourceLabel) {
         items.push(`
-            <span class="text-stone-400 flex items-center gap-1.5">
+            <span class="text-stone-500 flex items-center gap-1.5">
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
                 ${escapeHtml(task.sourceLabel)}
             </span>
         `);
     } else if (task.createdLabel) {
         items.push(
-            `<span class="text-stone-400">${escapeHtml(task.createdLabel.replace(/^created\s+/i, "added "))}</span>`,
+            `<span class="text-stone-500">${escapeHtml(task.createdLabel.replace(/^created\s+/i, "added "))}</span>`,
         );
     }
 
@@ -24,8 +24,8 @@ function renderInboxMetadata(task) {
                 (tag) => `
                 <span class="inline-flex items-center gap-1 bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md border border-stone-200/50 lowercase">
                     ${
-                        tag.color
-                            ? `<span class="w-1.5 h-1.5 rounded-full" style="background-color: ${tagColorMap[tag.color] || "#9ca3af"}"></span>`
+                        tag.color && tagColorMap[tag.color]
+                            ? `<span class="w-1.5 h-1.5 rounded-full" style="background-color: ${tagColorMap[tag.color]}"></span>`
                             : ""
                     }
                     ${escapeHtml(tag.label)}

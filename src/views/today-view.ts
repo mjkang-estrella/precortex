@@ -25,11 +25,11 @@ export function renderTodayView({ todoTasks, completedTasks, editingTaskId, edit
                                       }),
                                   )
                                   .join("")
-                            : '<div class="rounded-[24px] border border-dashed border-stone-300 bg-stone-50/70 p-6 text-[14px] text-stone-500 lowercase">No overdue or due-today tasks right now.</div>'
+                            : '<div class="rounded-3xl border border-dashed border-stone-300 bg-stone-50/70 p-6 text-[14px] text-stone-500 lowercase">No overdue or due-today tasks right now.</div>'
                     }
                 </div>
                 <div class="flex items-center gap-4 mt-10 mb-3">
-                    <div class="text-[11px] font-medium text-stone-300 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</div>
+                    <h2 class="text-[11px] font-medium text-stone-500 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</h2>
                     <div class="h-px bg-stone-100 flex-1"></div>
                 </div>
                 <div class="flex flex-col gap-2">
@@ -44,7 +44,7 @@ export function renderTodayView({ todoTasks, completedTasks, editingTaskId, edit
                                       }),
                                   )
                                   .join("")
-                            : '<div class="text-[13px] text-stone-300 lowercase">No completed tasks yet.</div>'
+                            : '<div class="text-[13px] text-stone-500 lowercase">No completed tasks yet.</div>'
                     }
                 </div>
             </div>

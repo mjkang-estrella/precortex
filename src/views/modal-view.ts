@@ -50,7 +50,7 @@ export function renderTaskModal({
     taskModal.className = "fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6";
     taskModal.innerHTML = `
         <div class="absolute inset-0 bg-stone-900/40 backdrop-blur-[2px] ${backdropAnimationClass}" data-action="close-modal"></div>
-        <div role="dialog" aria-modal="true" aria-label="task details" class="bg-white w-full max-w-[800px] max-h-[90vh] rounded-[28px] sm:rounded-[32px] shadow-modal relative z-10 flex flex-col overflow-hidden border border-white ${modalAnimationClass}">
+        <div role="dialog" aria-modal="true" aria-label="task details" class="bg-white w-full max-w-[800px] max-h-[90vh] rounded-[28px] sm:rounded-[32px] shadow-modal relative z-10 flex flex-col overflow-hidden ${modalAnimationClass}">
             <div class="px-4 py-4 sm:px-6 border-b border-stone-100 flex flex-wrap items-center justify-between gap-3 bg-white flex-shrink-0">
                 <div class="flex items-center gap-3 min-w-0">
                     <button data-action="modal-toggle-task" data-task-id="${task.id}" class="px-3 py-1.5 rounded-xl text-[13px] font-medium ${
@@ -73,7 +73,9 @@ export function renderTaskModal({
             <div class="flex-1 overflow-hidden flex flex-col lg:flex-row bg-white">
                 <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 lg:pr-6 flex flex-col gap-6 sm:gap-8 min-w-0">
                     <div class="flex gap-4 items-start">
-                        <button data-action="modal-toggle-task" data-task-id="${task.id}" class="${
+                        <button data-action="modal-toggle-task" data-task-id="${task.id}" aria-label="${
+                            task.status === "completed" ? "mark task incomplete" : "mark task complete"
+                        }" class="${
                             task.status === "completed"
                                 ? "w-[22px] h-[22px] rounded-full border-2 border-stone-900 bg-stone-900 mt-2 flex items-center justify-center flex-shrink-0"
                                 : "w-[22px] h-[22px] rounded-full border-2 border-stone-300 mt-2 flex-shrink-0 cursor-pointer hover:border-stone-400 transition-colors"
@@ -118,18 +120,20 @@ export function renderTaskModal({
                                           .map(
                                               (subtask) => `
                                     <div class="group/subtask flex items-start gap-3 ${subtask.done ? "opacity-60" : ""}">
-                                        <button data-action="toggle-subtask" data-task-id="${task.id}" data-subtask-id="${subtask.id}" class="${
-                                            subtask.done
-                                                ? "w-4 h-4 rounded border border-stone-900 bg-stone-900 flex items-center justify-center mt-2"
-                                                : "w-4 h-4 rounded border-2 border-stone-300 hover:border-stone-400 transition-colors mt-2"
-                                        }" aria-label="${
+                                        <button data-action="toggle-subtask" data-task-id="${task.id}" data-subtask-id="${subtask.id}" class="flex items-center justify-center w-8 h-8 -m-2 mt-0 flex-shrink-0" aria-label="${
                                             subtask.done ? "mark subtask incomplete" : "mark subtask complete"
                                         }" type="button">
-                                            ${
+                                            <span class="${
                                                 subtask.done
-                                                    ? '<svg class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
-                                                    : ""
-                                            }
+                                                    ? "w-4 h-4 rounded border border-stone-900 bg-stone-900 flex items-center justify-center"
+                                                    : "w-4 h-4 rounded border-2 border-stone-300 hover:border-stone-400 transition-colors"
+                                            }">
+                                                ${
+                                                    subtask.done
+                                                        ? '<svg class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+                                                        : ""
+                                                }
+                                            </span>
                                         </button>
                                         <input data-action="edit-subtask-title" data-task-id="${task.id}" data-subtask-id="${subtask.id}" aria-label="subtask title" class="flex-1 min-w-0 bg-transparent border-none outline-none p-0 pt-1.5 text-[14px] ${
                                             subtask.done ? "text-stone-500 line-through" : "text-stone-800"
@@ -150,25 +154,25 @@ export function renderTaskModal({
                 <div class="w-full lg:w-[260px] border-t lg:border-t-0 lg:border-l border-stone-100 bg-stone-50/30 p-4 sm:p-6 flex flex-col gap-6 flex-shrink-0">
                     <div class="flex flex-col gap-5">
                         <div class="flex flex-col gap-2">
-                            <label for="modalProjectSelect" class="text-[11px] font-semibold text-stone-400 lowercase tracking-wider">project</label>
+                            <label for="modalProjectSelect" class="text-[11px] font-semibold text-stone-500 lowercase tracking-wider">project</label>
                             <select id="modalProjectSelect" data-action="change-task-project" data-task-id="${task.id}" class="px-3 py-2 rounded-xl bg-white border border-stone-200 text-[13px] font-medium text-stone-700 outline-none focus:border-stone-400 lowercase">
                                 ${renderProjectOptions(task, projects)}
                             </select>
                         </div>
                         <div class="flex flex-col gap-2">
-                            <label for="modalDueDateInput" class="text-[11px] font-semibold text-stone-400 lowercase tracking-wider">due date</label>
+                            <label for="modalDueDateInput" class="text-[11px] font-semibold text-stone-500 lowercase tracking-wider">due date</label>
                             <input id="modalDueDateInput" data-action="change-task-due-date" data-task-id="${task.id}" type="date" value="${task.dueAt || ""}" class="px-3 py-2 rounded-xl bg-white border border-dashed border-stone-300 text-[13px] font-medium text-stone-700 outline-none focus:border-stone-400">
-                            <span class="text-[12px] text-stone-400 lowercase">${escapeHtml(dueLabel)}</span>
+                            <span class="text-[12px] text-stone-500 lowercase">${escapeHtml(dueLabel)}</span>
                         </div>
                         <div class="flex flex-col gap-2">
-                            <label for="modalPrioritySelect" class="text-[11px] font-semibold text-stone-400 lowercase tracking-wider">priority</label>
+                            <label for="modalPrioritySelect" class="text-[11px] font-semibold text-stone-500 lowercase tracking-wider">priority</label>
                             <select id="modalPrioritySelect" data-action="change-task-priority" data-task-id="${task.id}" class="px-3 py-2 rounded-xl bg-white border border-dashed border-stone-300 text-[13px] font-medium text-stone-700 outline-none focus:border-stone-400 lowercase">
                                 ${renderPriorityOptions(task)}
                             </select>
                         </div>
                     </div>
                     <div class="mt-auto pt-6 flex flex-col gap-3 border-t border-stone-200/60">
-                        <span class="text-[11px] font-medium text-stone-400 lowercase">${escapeHtml(task.createdLabel || "created recently")}</span>
+                        <span class="text-[11px] font-medium text-stone-500 lowercase">${escapeHtml(task.createdLabel || "created recently")}</span>
                     </div>
                 </div>
             </div>

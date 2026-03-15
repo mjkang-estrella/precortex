@@ -37,6 +37,13 @@ export function scheduleInboxTask(state, taskId, destination) {
         };
     });
 }
+export function unscheduleTask(state, taskId, previousDueAt) {
+    state.tasks = state.tasks.map((task) => {
+        if (task.id !== taskId)
+            return task;
+        return { ...task, dueAt: previousDueAt };
+    });
+}
 export function toggleTask(state, taskId) {
     cancelTaskCardEdit(state);
     const index = state.tasks.findIndex((task) => task.id === taskId);

@@ -54,7 +54,46 @@ const dom = {
     taskModal: byId<HTMLElement>("taskModal"),
     projectSetupModal: byId<HTMLElement>("projectSetupModal"),
     aiInput: byId<HTMLTextAreaElement>("aiInput"),
+    toastContainer: byId<HTMLElement>("toastContainer"),
 };
+
+const destinationLabels = {
+    today: "today",
+    tomorrow: "tomorrow",
+    "next-week": "next week",
+    later: "later",
+};
+
+let activeToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showToast(message: string, undoCallback?: () => void) {
+    if (activeToastTimer) clearTimeout(activeToastTimer);
+    dom.toastContainer.innerHTML = "";
+
+    const toast = document.createElement("div");
+    toast.className = "toast flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-stone-900 text-white text-[13px] font-medium shadow-float";
+    toast.innerHTML = `<span>${message}</span>${
+        undoCallback ? '<button data-action="toast-undo" class="text-stone-300 hover:text-white transition-colors lowercase" type="button">undo</button>' : ""
+    }`;
+
+    if (undoCallback) {
+        toast.querySelector('[data-action="toast-undo"]')?.addEventListener("click", () => {
+            undoCallback();
+            dismissToast();
+        });
+    }
+
+    dom.toastContainer.appendChild(toast);
+    activeToastTimer = setTimeout(dismissToast, 3000);
+}
+
+function dismissToast() {
+    if (activeToastTimer) { clearTimeout(activeToastTimer); activeToastTimer = null; }
+    const toast = dom.toastContainer.querySelector(".toast");
+    if (!toast) return;
+    toast.classList.add("toast-leaving");
+    setTimeout(() => { dom.toastContainer.innerHTML = ""; }, 200);
+}
 
 function isMobileViewport() {
     return mobileViewport.matches;
@@ -366,6 +405,18 @@ document.addEventListener("keydown", (event) => {
         if (setupDialog) { trapFocus(setupDialog, event); return; }
     }
 
+    if ((event.key === "Enter" || event.key === " ") && (target as HTMLElement)?.dataset?.action === "open-task") {
+        event.preventDefault();
+        const taskId = (target as HTMLElement).dataset.taskId;
+        if (taskId) {
+            actions.openTaskModal(state, taskId);
+            closeMobileChrome();
+            updateTaskModal(true);
+            renderChrome();
+        }
+        return;
+    }
+
     if (event.key === "Escape" && getSelectedTask(state)) {
         if (state.modalSubtaskComposerOpen) {
             actions.closeModalSubtaskComposer(state);
@@ -555,16 +606,22 @@ document.addEventListener("click", (event) => {
     }
 
     if (action === "schedule-task") {
+        const label = destinationLabels[destination] || destination;
         const row = actionElement.closest(".task-row") as HTMLElement | null;
-        if (row) {
-            row.classList.add("task-removing");
-            setTimeout(() => {
-                actions.scheduleInboxTask(state, taskId, destination);
-                render();
-            }, 250);
-        } else {
+        const doSchedule = () => {
+            const prevDueAt = state.tasks.find((t) => t.id === taskId)?.dueAt || null;
             actions.scheduleInboxTask(state, taskId, destination);
             render();
+            showToast(`scheduled for ${label}`, () => {
+                actions.unscheduleTask(state, taskId, prevDueAt);
+                render();
+            });
+        };
+        if (row) {
+            row.classList.add("task-removing");
+            setTimeout(doSchedule, 250);
+        } else {
+            doSchedule();
         }
         return;
     }

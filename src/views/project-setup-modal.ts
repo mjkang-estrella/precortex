@@ -16,7 +16,7 @@ function renderSetupMessages(messages) {
 
             return `
                 <div class="flex justify-start">
-                    <div class="max-w-[88%] rounded-[24px] rounded-tl-[6px] bg-stone-100 border border-stone-200/60 text-stone-800 px-4 py-3 text-[14px] leading-relaxed">
+                    <div class="max-w-[88%] rounded-3xl rounded-tl-[6px] bg-stone-100 border border-stone-200/60 text-stone-800 px-4 py-3 text-[14px] leading-relaxed">
                         ${escapeHtml(message.text)}
                     </div>
                 </div>
@@ -34,38 +34,38 @@ function formatDraftDeadline(deadline) {
 function renderReview(draft) {
     return `
         <div class="flex-1 overflow-y-auto p-8 flex flex-col gap-6">
-            <div class="rounded-[24px] border border-stone-200 bg-stone-50/60 p-5">
-                <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400 mb-2">bay draft</div>
+            <div class="rounded-3xl border border-stone-200 bg-stone-50/60 p-5">
+                <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 mb-2">bay draft</div>
                 <p class="text-[14px] leading-relaxed text-stone-500 lowercase">
                     edit anything that feels wrong. Bay will create exactly what you confirm here.
                 </p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label class="flex flex-col gap-2">
-                    <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">project name</span>
+                    <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">project name</span>
                     <input id="projectDraftName" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none focus:border-stone-400" value="${escapeHtml(draft.name)}">
                 </label>
                 <label class="flex flex-col gap-2">
-                    <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">deadline</span>
+                    <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">deadline</span>
                     <input id="projectDraftDeadline" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none focus:border-stone-400" value="${escapeHtml(draft.deadline)}">
-                    <span class="text-[12px] text-stone-400 lowercase">${escapeHtml(formatDraftDeadline(draft.deadline))}</span>
+                    <span class="text-[12px] text-stone-500 lowercase">${escapeHtml(formatDraftDeadline(draft.deadline))}</span>
                 </label>
             </div>
             <label class="flex flex-col gap-2">
-                <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">summary</span>
-                <textarea id="projectDraftSummary" class="min-h-[120px] rounded-[24px] border border-stone-200 bg-white px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none resize-none focus:border-stone-400">${escapeHtml(draft.summary)}</textarea>
+                <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">summary</span>
+                <textarea id="projectDraftSummary" class="min-h-[120px] rounded-3xl border border-stone-200 bg-white px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none resize-none focus:border-stone-400">${escapeHtml(draft.summary)}</textarea>
             </label>
             <label class="flex flex-col gap-2">
-                <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">next step</span>
+                <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">next step</span>
                 <input id="projectDraftNextStep" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none focus:border-stone-400" value="${escapeHtml(draft.nextStep)}">
             </label>
             <div class="flex flex-col gap-3">
-                <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">starter tasks</div>
+                <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">starter tasks</div>
                 ${draft.tasks
                     .map(
                         (task, index) => `
                             <div class="rounded-[22px] border border-stone-200 bg-white px-4 py-3">
-                                <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400 mb-2">${index === 0 ? "next step task" : `task ${index + 1}`}</div>
+                                <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 mb-2">${index === 0 ? "next step task" : `task ${index + 1}`}</div>
                                 <input
                                     data-action="edit-project-draft-task"
                                     data-task-id="${task.id}"
@@ -91,7 +91,7 @@ export function renderProjectSetupModal({ projectSetupModal, projectSetup }) {
     projectSetupModal.className = "fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6";
     projectSetupModal.innerHTML = `
         <div class="absolute inset-0 bg-stone-900/45 backdrop-blur-[2px] animate-backdrop" data-action="close-project-setup"></div>
-        <div role="dialog" aria-modal="true" aria-label="project setup" class="relative z-10 w-full max-w-[920px] max-h-[90vh] overflow-hidden rounded-[28px] sm:rounded-[32px] border border-white bg-white shadow-modal animate-modal flex flex-col">
+        <div role="dialog" aria-modal="true" aria-label="project setup" class="relative z-10 w-full max-w-[920px] max-h-[90vh] overflow-hidden rounded-[28px] sm:rounded-[32px] bg-white shadow-modal animate-modal flex flex-col">
             <div class="px-4 py-4 sm:px-6 sm:py-5 border-b border-stone-100 flex flex-wrap items-center justify-between gap-3 bg-white">
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="w-9 h-9 rounded-full bg-stone-900 text-white flex items-center justify-center shadow-sm">
@@ -99,7 +99,7 @@ export function renderProjectSetupModal({ projectSetupModal, projectSetup }) {
                     </div>
                     <div>
                         <div class="text-[15px] font-medium lowercase">bay project setup</div>
-                        <div class="text-[12px] text-stone-400 lowercase">shape the project before it turns into tasks</div>
+                        <div class="text-[12px] text-stone-500 lowercase">shape the project before it turns into tasks</div>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -119,7 +119,7 @@ export function renderProjectSetupModal({ projectSetupModal, projectSetup }) {
                             </div>
                         </div>
                         <div class="border-t border-stone-100 p-4 bg-white">
-                            <div class="group border border-stone-200 bg-white rounded-[24px] flex items-end p-1.5 focus-within:border-stone-500 focus-within:shadow-sm transition-all">
+                            <div class="group border border-stone-200 bg-white rounded-3xl flex items-end p-1.5 focus-within:border-stone-500 focus-within:shadow-sm transition-all">
                                 <textarea id="projectSetupInput" aria-label="reply to bay" class="flex-1 bg-transparent border-none outline-none text-[14px] placeholder-stone-400 text-stone-900 py-2.5 pl-4 pr-2 resize-none max-h-[120px] overflow-y-auto" rows="1" placeholder="answer bay..."></textarea>
                                 <button data-action="send-project-setup" aria-label="send message" class="w-9 h-9 flex-shrink-0 rounded-full bg-stone-900 text-white flex items-center justify-center hover:scale-105 transition-transform shadow-sm mb-0.5 mr-0.5" type="button">
                                     <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>

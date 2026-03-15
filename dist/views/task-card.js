@@ -24,8 +24,8 @@ export function renderTaskBadges(task) {
     task.tags.forEach((tag) => {
         badges.push(`
             <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-dashed border-stone-300 bg-white text-stone-500 lowercase text-xs font-medium">
-                ${tag.color
-            ? `<span class="w-1.5 h-1.5 rounded-full" style="background-color: ${tagColorMap[tag.color] || "#9ca3af"}"></span>`
+                ${tag.color && tagColorMap[tag.color]
+            ? `<span class="w-1.5 h-1.5 rounded-full" style="background-color: ${tagColorMap[tag.color]}"></span>`
             : ""}
                 ${escapeHtml(tag.label)}
             </span>
@@ -42,8 +42,8 @@ export function renderTaskCard(task, options = {}) {
     const badges = renderTaskBadges(task);
     const anchorAttribute = anchorDate ? `data-anchor-date="${anchorDate}"` : "";
     const rowClasses = isCompleted
-        ? "task-row completed group bg-stone-50 rounded-2xl p-5 flex flex-col gap-3 transition-colors cursor-pointer scroll-mt-6"
-        : "task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col gap-3 hover:border-stone-400 hover:bg-stone-50/50 transition-colors cursor-pointer scroll-mt-6";
+        ? "task-row completed group bg-stone-50 rounded-2xl p-5 flex flex-col gap-3 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2"
+        : "task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col gap-3 hover:border-stone-400 hover:bg-stone-50/50 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2";
     const titleClasses = isCompleted
         ? "text-[15px] text-stone-400 font-medium line-through task-title"
         : "text-[15px] text-stone-900 font-semibold transition-colors duration-200 task-title";
@@ -72,7 +72,7 @@ export function renderTaskCard(task, options = {}) {
                 `
             : ""}
                 <div class="pl-[38px] flex items-center justify-between gap-3 flex-wrap">
-                    <div class="text-[11px] font-medium text-stone-400 lowercase">editing task card</div>
+                    <div class="text-[11px] font-medium text-stone-500 lowercase">editing task card</div>
                     <div class="flex items-center gap-2">
                         <button data-action="cancel-task-edit" class="px-3 py-1.5 rounded-xl border border-stone-200 text-[13px] font-medium text-stone-600 hover:border-stone-300 hover:text-stone-900 transition-colors lowercase" type="button">cancel</button>
                         <button data-action="save-task-edit" class="px-3 py-1.5 rounded-xl bg-stone-900 text-white text-[13px] font-medium hover:bg-stone-700 transition-colors lowercase" type="button">save</button>
@@ -82,7 +82,7 @@ export function renderTaskCard(task, options = {}) {
         `;
     }
     return `
-        <div class="${rowClasses}" data-action="open-task" data-task-id="${task.id}" data-task-list="${listId}" draggable="true" ${anchorAttribute} style="animation-delay: ${staggerDelay}ms">
+        <div class="${rowClasses}" data-action="open-task" data-task-id="${task.id}" data-task-list="${listId}" draggable="true" tabindex="0" role="button" aria-label="${escapeHtml(task.title)}" ${anchorAttribute} style="animation-delay: ${staggerDelay}ms">
             <div class="flex items-start gap-4">
                 <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-0.5 flex-shrink-0" aria-label="${isCompleted ? "mark task incomplete" : "mark task complete"}" type="button">
                     <div class="${checkboxClasses}">

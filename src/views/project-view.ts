@@ -13,15 +13,15 @@ export function renderProjectView({ project, todoTasks, completedTasks, editingT
         <div class="h-full flex flex-col min-h-0">
             <header class="px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-start lg:gap-6 flex-shrink-0 z-10 bg-white">
                 <div class="flex flex-col gap-3 max-w-3xl">
-                    <div class="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">
+                    <div class="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
                         <span class="w-2 h-2 rounded-full bg-stone-900"></span>
                         bay project
                     </div>
                     <h1 class="font-display text-4xl sm:text-5xl tracking-tight">${escapeHtml(project.name)}</h1>
-                    <p class="text-[14px] leading-relaxed text-stone-400 max-w-3xl">${escapeHtml(project.summary)}</p>
+                    <p class="text-[14px] leading-relaxed text-stone-500 max-w-3xl">${escapeHtml(project.summary)}</p>
                 </div>
                 <div class="flex flex-col items-start lg:items-end gap-2">
-                    <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">deadline</span>
+                    <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">deadline</span>
                     <span class="px-4 py-2 rounded-full bg-stone-900 text-white text-[13px] font-medium lowercase shadow-sm">
                         ${escapeHtml(renderDeadline(project.deadline))}
                     </span>
@@ -30,7 +30,7 @@ export function renderProjectView({ project, todoTasks, completedTasks, editingT
             <div class="px-4 pb-4 sm:px-6 sm:pb-5 lg:px-10 lg:pb-6 flex-shrink-0 z-10 bg-white">
                 <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] gap-4">
                     <div class="rounded-2xl border border-stone-200 bg-stone-50/70 p-6 flex flex-col gap-2">
-                        <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">next step</div>
+                        <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">next step</div>
                         <div class="font-display text-2xl tracking-tight text-stone-900">${escapeHtml(project.nextStep)}</div>
                     </div>
                     <div class="group flex items-center gap-3 bg-stone-50 rounded-2xl px-5 py-4 border border-stone-200/60 focus-within:border-stone-400 focus-within:bg-white focus-within:shadow-sm transition-all">
@@ -52,11 +52,11 @@ export function renderProjectView({ project, todoTasks, completedTasks, editingT
                                       }),
                                   )
                                   .join("")
-                            : '<div class="rounded-[24px] border border-dashed border-stone-300 bg-stone-50/70 p-6 text-[14px] text-stone-500 lowercase">No active project tasks yet.</div>'
+                            : '<div class="rounded-3xl border border-dashed border-stone-300 bg-stone-50/70 p-6 text-[14px] text-stone-500 lowercase">No active project tasks yet.</div>'
                     }
                 </div>
                 <div class="flex items-center gap-4 mt-10 mb-3">
-                    <div class="text-[11px] font-medium text-stone-300 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</div>
+                    <h2 class="text-[11px] font-medium text-stone-500 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</h2>
                     <div class="h-px bg-stone-100 flex-1"></div>
                 </div>
                 <div class="flex flex-col gap-2">
@@ -71,7 +71,7 @@ export function renderProjectView({ project, todoTasks, completedTasks, editingT
                                       }),
                                   )
                                   .join("")
-                            : '<div class="text-[13px] text-stone-300 lowercase">No completed project tasks yet.</div>'
+                            : '<div class="text-[13px] text-stone-500 lowercase">No completed project tasks yet.</div>'
                     }
                 </div>
             </div>
