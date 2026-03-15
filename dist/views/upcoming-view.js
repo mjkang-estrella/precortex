@@ -1,7 +1,7 @@
 import { formatters } from "../utils/date.js";
 import { escapeHtml } from "../utils/text.js";
 import { renderTaskCard } from "./task-card.js";
-function renderUpcomingSection(sectionKey, title, tasks) {
+function renderUpcomingSection(sectionKey, title, tasks, editingTaskId, editingTaskDraft) {
     if (!tasks.length)
         return "";
     let lastDate = null;
@@ -9,7 +9,12 @@ function renderUpcomingSection(sectionKey, title, tasks) {
         .map((task, i) => {
         const anchorDate = task.dueAt !== lastDate ? task.dueAt : null;
         lastDate = task.dueAt;
-        return renderTaskCard(task, { anchorDate, index: i });
+        return renderTaskCard(task, {
+            anchorDate,
+            index: i,
+            listId: `upcoming-${sectionKey}`,
+            editingDraft: editingTaskId === task.id ? editingTaskDraft : null,
+        });
     })
         .join("");
     return `
@@ -22,7 +27,7 @@ function renderUpcomingSection(sectionKey, title, tasks) {
         </div>
     `;
 }
-export function renderUpcomingView({ weekDays, groups }) {
+export function renderUpcomingView({ weekDays, groups, editingTaskId, editingTaskDraft }) {
     const hasUpcomingTasks = Object.values(groups).some((tasks) => Array.isArray(tasks) && tasks.length > 0);
     return `
         <div class="h-full flex flex-col min-h-0">
@@ -67,9 +72,9 @@ export function renderUpcomingView({ weekDays, groups }) {
             <div id="upcomingScrollArea" class="flex-1 overflow-y-auto px-4 pb-24 sm:px-6 sm:pb-10 lg:px-10 flex flex-col">
                 ${hasUpcomingTasks
         ? `
-                    ${renderUpcomingSection("tomorrow", "tomorrow", groups.tomorrow)}
-                    ${renderUpcomingSection("this-week", "this week", groups["this-week"])}
-                    ${renderUpcomingSection("later", "later", groups.later)}
+                    ${renderUpcomingSection("tomorrow", "tomorrow", groups.tomorrow, editingTaskId, editingTaskDraft)}
+                    ${renderUpcomingSection("this-week", "this week", groups["this-week"], editingTaskId, editingTaskDraft)}
+                    ${renderUpcomingSection("later", "later", groups.later, editingTaskId, editingTaskDraft)}
                 `
         : `
                     <div class="mt-4 rounded-[24px] border border-dashed border-stone-300 bg-stone-50/70 p-8 text-[14px] text-stone-500 lowercase">

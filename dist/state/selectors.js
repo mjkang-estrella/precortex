@@ -83,7 +83,9 @@ export function getTaskDueMeta(task) {
     return { label, longLabel, tone, diff, date };
 }
 export function getTodayTasks(state) {
-    return sortTasksByDueDate(state.tasks.filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff <= 0)).map((task) => decorateTask(state, task));
+    return state.tasks
+        .filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff <= 0)
+        .map((task) => decorateTask(state, task));
 }
 export function getCompletedTasks(state) {
     return [...state.tasks]
@@ -94,7 +96,9 @@ export function getInboxCount(state) {
     return getInboxTasks(state).length;
 }
 export function getFutureTodoTasks(state) {
-    return sortTasksByDueDate(state.tasks.filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff > 0)).map((task) => decorateTask(state, task));
+    return state.tasks
+        .filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff > 0)
+        .map((task) => decorateTask(state, task));
 }
 export function getUpcomingSectionKey(date) {
     const diff = diffInDays(date, TODAY);
@@ -154,7 +158,9 @@ export function getSelectedProject(state) {
     return state.selectedProjectId ? getProject(state, state.selectedProjectId) : null;
 }
 export function getProjectTasks(state, projectId) {
-    return sortTasksByDueDate(state.tasks.filter((task) => task.projectId === projectId && task.status === "todo")).map((task) => decorateTask(state, task));
+    return state.tasks
+        .filter((task) => task.projectId === projectId && task.status === "todo")
+        .map((task) => decorateTask(state, task));
 }
 export function getProjectCompletedTasks(state, projectId) {
     return state.tasks

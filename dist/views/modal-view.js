@@ -1,13 +1,25 @@
 import { getTaskDueMeta } from "../state/selectors.js";
 import { escapeHtml } from "../utils/text.js";
-export function renderTaskModal({ taskModal, task, animate = false }) {
+function renderProjectOptions(task, projects) {
+    const options = [
+        `<option value="" ${!task.projectId ? "selected" : ""}>inbox</option>`,
+        ...projects.map((project) => `<option value="${project.id}" ${task.projectId === project.id ? "selected" : ""}>${escapeHtml(project.name)}</option>`),
+    ];
+    return options.join("");
+}
+function renderPriorityOptions(task) {
+    const priorities = ["none", "low", "medium", "high"];
+    return priorities
+        .map((priority) => `<option value="${priority}" ${task.priority === priority ? "selected" : ""}>${priority}</option>`)
+        .join("");
+}
+export function renderTaskModal({ taskModal, task, projects, subtaskComposerOpen = false, subtaskDraft = "", animate = false, }) {
     if (!task) {
         taskModal.className = "hidden fixed inset-0 z-50 items-center justify-center p-6";
         taskModal.innerHTML = "";
         return;
     }
     const doneCount = task.subtasks.filter((subtask) => subtask.done).length;
-    const subtaskCountLabel = task.subtasks.length ? `${doneCount}/${task.subtasks.length} done` : "0/0 done";
     const dueMeta = getTaskDueMeta(task);
     const dueLabel = task.dueAt ? dueMeta.longLabel : "unscheduled";
     const backdropAnimationClass = animate ? "animate-backdrop" : "";
@@ -20,7 +32,7 @@ export function renderTaskModal({ taskModal, task, animate = false }) {
                 <div class="flex items-center gap-3 min-w-0">
                     <button data-action="modal-toggle-task" data-task-id="${task.id}" class="px-3 py-1.5 rounded-xl text-[13px] font-medium ${task.status === "completed"
         ? "text-stone-500 border border-stone-200"
-        : "bg-stone-900 text-white border border-stone-900"} transition-all lowercase flex items-center gap-2">
+        : "bg-stone-900 text-white border border-stone-900"} transition-all lowercase flex items-center gap-2" type="button">
                         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                         ${task.status === "completed" ? "mark incomplete" : "mark complete"}
                     </button>
@@ -28,9 +40,6 @@ export function renderTaskModal({ taskModal, task, animate = false }) {
                     <span class="text-[13px] text-stone-400 lowercase">${escapeHtml(task.projectName || "inbox")}</span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button class="w-8 h-8 flex items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-900 transition-colors" type="button" aria-label="more options">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-                    </button>
                     <button data-action="close-modal" aria-label="close task details" class="w-8 h-8 flex items-center justify-center rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-900 transition-colors" type="button">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
@@ -52,23 +61,39 @@ export function renderTaskModal({ taskModal, task, animate = false }) {
                         <textarea id="modalDescriptionInput" data-task-id="${task.id}" aria-label="task description" class="w-full bg-transparent text-[15px] leading-relaxed text-stone-600 outline-none resize-none min-h-[100px] placeholder-stone-400" placeholder="add a description...">${escapeHtml(task.description || "")}</textarea>
                     </div>
                     <div class="pl-[38px] flex flex-col gap-3">
-                        <div class="flex items-center justify-between mb-1">
+                        <div class="flex items-center justify-between mb-1 gap-3 flex-wrap">
                             <h3 class="text-[13px] font-semibold text-stone-900 lowercase tracking-wide">subtasks</h3>
-                            <span class="text-[12px] text-stone-400 lowercase font-medium">${subtaskCountLabel}</span>
+                            <button data-action="open-subtask-composer" data-task-id="${task.id}" class="w-7 h-7 rounded-full border border-stone-200 bg-white text-stone-400 hover:text-stone-900 hover:border-stone-400 transition-colors flex items-center justify-center" aria-label="add subtask" type="button">
+                                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            </button>
                         </div>
                         <div class="flex flex-col gap-2.5">
+                            ${subtaskComposerOpen
+        ? `
+                                <div class="flex items-start gap-3">
+                                    <div class="w-4 h-4 rounded border-2 border-stone-300 mt-2 flex-shrink-0"></div>
+                                    <input id="modalNewSubtaskInput" data-task-id="${task.id}" aria-label="new subtask" class="flex-1 min-w-0 bg-transparent border-none outline-none p-0 pt-1.5 text-[14px] text-stone-800 placeholder-stone-400" value="${escapeHtml(subtaskDraft)}" placeholder="new subtask...">
+                                    <button data-action="cancel-subtask-composer" class="opacity-100 w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-stone-900 transition-all flex-shrink-0" aria-label="cancel new subtask" type="button">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path></svg>
+                                    </button>
+                                </div>
+                            `
+        : ""}
                             ${task.subtasks.length
         ? task.subtasks
             .map((subtask) => `
-                                    <div class="flex items-center gap-3 ${subtask.done ? "opacity-60" : ""}">
+                                    <div class="group/subtask flex items-start gap-3 ${subtask.done ? "opacity-60" : ""}">
                                         <button data-action="toggle-subtask" data-task-id="${task.id}" data-subtask-id="${subtask.id}" class="${subtask.done
-            ? "w-4 h-4 rounded border border-stone-900 bg-stone-900 flex items-center justify-center"
-            : "w-4 h-4 rounded border-2 border-stone-300 hover:border-stone-400 transition-colors"}" aria-label="${subtask.done ? "mark subtask incomplete" : "mark subtask complete"}" type="button">
+            ? "w-4 h-4 rounded border border-stone-900 bg-stone-900 flex items-center justify-center mt-2"
+            : "w-4 h-4 rounded border-2 border-stone-300 hover:border-stone-400 transition-colors mt-2"}" aria-label="${subtask.done ? "mark subtask incomplete" : "mark subtask complete"}" type="button">
                                             ${subtask.done
             ? '<svg class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
             : ""}
                                         </button>
-                                        <div class="text-[14px] ${subtask.done ? "text-stone-500 line-through" : "text-stone-800"}">${escapeHtml(subtask.title)}</div>
+                                        <input data-action="edit-subtask-title" data-task-id="${task.id}" data-subtask-id="${subtask.id}" aria-label="subtask title" class="flex-1 min-w-0 bg-transparent border-none outline-none p-0 pt-1.5 text-[14px] ${subtask.done ? "text-stone-500 line-through" : "text-stone-800"}" value="${escapeHtml(subtask.title)}">
+                                        <button data-action="remove-subtask" data-task-id="${task.id}" data-subtask-id="${subtask.id}" class="opacity-0 pointer-events-none group-hover/subtask:opacity-100 group-hover/subtask:pointer-events-auto w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-stone-900 transition-all flex-shrink-0" aria-label="remove subtask" type="button">
+                                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path></svg>
+                                        </button>
                                     </div>
                                 `)
             .join("")
@@ -77,35 +102,24 @@ export function renderTaskModal({ taskModal, task, animate = false }) {
                     </div>
                     <div class="h-8"></div>
                 </div>
-                <div class="w-full lg:w-[240px] border-t lg:border-t-0 lg:border-l border-stone-100 bg-stone-50/30 p-4 sm:p-6 flex flex-col gap-6 flex-shrink-0">
+                <div class="w-full lg:w-[260px] border-t lg:border-t-0 lg:border-l border-stone-100 bg-stone-50/30 p-4 sm:p-6 flex flex-col gap-6 flex-shrink-0">
                     <div class="flex flex-col gap-5">
                         <div class="flex flex-col gap-2">
-                            <span class="text-[11px] font-semibold text-stone-400 lowercase tracking-wider">project</span>
-                            <button class="flex items-center justify-between px-3 py-2 rounded-xl bg-white border border-stone-200 text-stone-600 lowercase group" type="button">
-                                <div class="flex items-center gap-2">
-                                    <svg class="w-4 h-4 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                                    <span class="text-[13px] font-medium text-stone-700">${escapeHtml(task.projectName || "inbox")}</span>
-                                </div>
-                                <svg class="w-3.5 h-3.5 text-stone-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                            </button>
+                            <label for="modalProjectSelect" class="text-[11px] font-semibold text-stone-400 lowercase tracking-wider">project</label>
+                            <select id="modalProjectSelect" data-action="change-task-project" data-task-id="${task.id}" class="px-3 py-2 rounded-xl bg-white border border-stone-200 text-[13px] font-medium text-stone-700 outline-none focus:border-stone-400 lowercase">
+                                ${renderProjectOptions(task, projects)}
+                            </select>
                         </div>
                         <div class="flex flex-col gap-2">
-                            <span class="text-[11px] font-semibold text-stone-400 lowercase tracking-wider">due date</span>
-                            <button class="flex items-center justify-between px-3 py-2 rounded-xl border border-dashed border-stone-300 text-stone-500 lowercase group" type="button">
-                                <div class="flex items-center gap-2">
-                                    <svg class="w-4 h-4 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                                    <span class="text-[13px] font-medium">${escapeHtml(dueLabel)}</span>
-                                </div>
-                            </button>
+                            <label for="modalDueDateInput" class="text-[11px] font-semibold text-stone-400 lowercase tracking-wider">due date</label>
+                            <input id="modalDueDateInput" data-action="change-task-due-date" data-task-id="${task.id}" type="date" value="${task.dueAt || ""}" class="px-3 py-2 rounded-xl bg-white border border-dashed border-stone-300 text-[13px] font-medium text-stone-700 outline-none focus:border-stone-400">
+                            <span class="text-[12px] text-stone-400 lowercase">${escapeHtml(dueLabel)}</span>
                         </div>
                         <div class="flex flex-col gap-2">
-                            <span class="text-[11px] font-semibold text-stone-400 lowercase tracking-wider">priority</span>
-                            <button class="flex items-center justify-between px-3 py-2 rounded-xl border border-dashed border-stone-300 text-stone-500 lowercase group" type="button">
-                                <div class="flex items-center gap-2">
-                                    <svg class="w-4 h-4 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
-                                    <span class="text-[13px] font-medium">${escapeHtml(task.priority || "none")}</span>
-                                </div>
-                            </button>
+                            <label for="modalPrioritySelect" class="text-[11px] font-semibold text-stone-400 lowercase tracking-wider">priority</label>
+                            <select id="modalPrioritySelect" data-action="change-task-priority" data-task-id="${task.id}" class="px-3 py-2 rounded-xl bg-white border border-dashed border-stone-300 text-[13px] font-medium text-stone-700 outline-none focus:border-stone-400 lowercase">
+                                ${renderPriorityOptions(task)}
+                            </select>
                         </div>
                     </div>
                     <div class="mt-auto pt-6 flex flex-col gap-3 border-t border-stone-200/60">

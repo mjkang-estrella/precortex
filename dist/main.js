@@ -15,6 +15,12 @@ import { renderUpcomingView } from "./views/upcoming-view.js";
 const { state, initialTasks, assistantConfigs } = createStore();
 const byId = (id) => document.getElementById(id);
 const mobileViewport = window.matchMedia("(max-width: 1023px)");
+let suppressNextTaskListAnimation = false;
+const dragState = {
+    taskId: null,
+    listId: null,
+    justDragged: false,
+};
 const dom = {
     mainView: byId("mainView"),
     aiMessages: byId("aiMessages"),
@@ -39,7 +45,10 @@ function isMobileViewport() {
 if (isMobileViewport()) {
     state.assistantOpen = false;
 }
-function renderMainView() {
+function renderMainView(suppressAnimation = false) {
+    const editingTaskId = state.editingTaskId;
+    const editingTaskDraft = state.editingTaskDraft;
+    dom.mainView.classList.toggle("task-list-static", suppressAnimation);
     if (state.currentView === "project") {
         const project = getSelectedProject(state);
         if (!project) {
@@ -52,12 +61,16 @@ function renderMainView() {
             project,
             todoTasks: getProjectTasks(state, project.id),
             completedTasks: getProjectCompletedTasks(state, project.id),
+            editingTaskId,
+            editingTaskDraft,
         });
         return;
     }
     if (state.currentView === "inbox") {
         dom.mainView.innerHTML = renderInboxView({
             inboxTasks: getInboxTasks(state),
+            editingTaskId,
+            editingTaskDraft,
         });
         return;
     }
@@ -65,18 +78,25 @@ function renderMainView() {
         dom.mainView.innerHTML = renderUpcomingView({
             weekDays: getWeekDays(state, state.upcomingWeekStart),
             groups: getUpcomingGroups(state),
+            editingTaskId,
+            editingTaskDraft,
         });
         return;
     }
     dom.mainView.innerHTML = renderTodayView({
         todoTasks: getTodayTasks(state),
         completedTasks: getCompletedTasks(state),
+        editingTaskId,
+        editingTaskDraft,
     });
 }
 function updateTaskModal(animate = false) {
     renderTaskModal({
         taskModal: dom.taskModal,
         task: getSelectedTask(state),
+        projects: getProjects(state),
+        subtaskComposerOpen: state.modalSubtaskComposerOpen,
+        subtaskDraft: state.modalSubtaskDraft,
         animate,
     });
 }
@@ -156,6 +176,8 @@ function renderChrome() {
     dom.reopenAssistantButton.classList.toggle("pointer-events-none", !showAssistantButton);
 }
 function render() {
+    const suppressAnimation = suppressNextTaskListAnimation;
+    suppressNextTaskListAnimation = false;
     renderNavigation({
         currentView: state.currentView,
         inboxCount: getInboxCount(state),
@@ -164,7 +186,7 @@ function render() {
         projects: getProjects(state),
         selectedProjectId: state.selectedProjectId,
     });
-    renderMainView();
+    renderMainView(suppressAnimation);
     updateAssistant();
     updateTaskModal();
     renderProjectSetupModal({
@@ -181,6 +203,17 @@ function render() {
 function autoResize(textarea) {
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+}
+function focusTaskCardTitle(taskId) {
+    requestAnimationFrame(() => {
+        const input = document.querySelector(`[data-action="edit-task-title"][data-task-id="${taskId}"]`);
+        if (!input)
+            return;
+        input.focus();
+        if ("setSelectionRange" in input) {
+            input.setSelectionRange(input.value.length, input.value.length);
+        }
+    });
 }
 function sendMessage(textOverride) {
     const view = state.currentView;
@@ -229,6 +262,32 @@ function sendProjectSetupMessage() {
     input.style.height = "auto";
     render();
 }
+function addModalSubtask(taskId) {
+    const value = state.modalSubtaskDraft.trim();
+    if (!value)
+        return;
+    actions.addTaskSubtask(state, taskId, value);
+    render();
+}
+function focusModalSubtaskInput() {
+    requestAnimationFrame(() => {
+        const input = document.getElementById("modalNewSubtaskInput");
+        if (!input)
+            return;
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+    });
+}
+function closeTaskModalAndRender() {
+    actions.closeTaskModal(state);
+    suppressNextTaskListAnimation = true;
+    render();
+}
+function clearTaskDropIndicators() {
+    document.querySelectorAll(".task-drop-before, .task-drop-after, .task-dragging").forEach((node) => {
+        node.classList.remove("task-drop-before", "task-drop-after", "task-dragging");
+    });
+}
 function trapFocus(container, event) {
     const focusable = container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
     if (!focusable.length)
@@ -259,8 +318,17 @@ document.addEventListener("keydown", (event) => {
         }
     }
     if (event.key === "Escape" && getSelectedTask(state)) {
-        actions.closeTaskModal(state);
-        updateTaskModal();
+        if (state.modalSubtaskComposerOpen) {
+            actions.closeModalSubtaskComposer(state);
+            updateTaskModal();
+            return;
+        }
+        closeTaskModalAndRender();
+        return;
+    }
+    if (event.key === "Escape" && state.editingTaskId) {
+        actions.cancelTaskCardEdit(state);
+        renderMainView();
         return;
     }
     if (event.key === "Escape" && state.projectSetup.open) {
@@ -278,6 +346,20 @@ document.addEventListener("keydown", (event) => {
         render();
         return;
     }
+    if (target?.dataset.action === "edit-task-title" && event.key === "Enter") {
+        event.preventDefault();
+        actions.saveTaskCardEdit(state);
+        renderMainView();
+        return;
+    }
+    if (target?.dataset.action === "edit-task-description" &&
+        event.key === "Enter" &&
+        (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        actions.saveTaskCardEdit(state);
+        renderMainView();
+        return;
+    }
     if (target?.id === "aiInput" && event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         sendMessage();
@@ -286,6 +368,10 @@ document.addEventListener("keydown", (event) => {
         event.preventDefault();
         sendProjectSetupMessage();
     }
+    if (target?.id === "modalNewSubtaskInput" && event.key === "Enter") {
+        event.preventDefault();
+        addModalSubtask(target.dataset.taskId);
+    }
 });
 document.addEventListener("input", (event) => {
     const target = event.target;
@@ -293,12 +379,27 @@ document.addEventListener("input", (event) => {
         return;
     if (target.id === "modalTitleInput") {
         actions.updateTaskField(state, target.dataset.taskId, "title", target.value);
-        renderMainView();
         return;
     }
     if (target.id === "modalDescriptionInput") {
         actions.updateTaskField(state, target.dataset.taskId, "description", target.value);
-        renderMainView();
+        return;
+    }
+    if (target.dataset.action === "edit-task-title") {
+        actions.updateTaskCardDraftField(state, "title", target.value);
+        return;
+    }
+    if (target.dataset.action === "edit-task-description") {
+        actions.updateTaskCardDraftField(state, "description", target.value);
+        autoResize(target);
+        return;
+    }
+    if (target.dataset.action === "edit-subtask-title") {
+        actions.updateSubtaskTitle(state, target.dataset.taskId, target.dataset.subtaskId, target.value);
+        return;
+    }
+    if (target.id === "modalNewSubtaskInput") {
+        actions.updateModalSubtaskDraft(state, target.value);
         return;
     }
     if (target.id === "aiInput" || target.id === "projectSetupInput") {
@@ -324,6 +425,25 @@ document.addEventListener("input", (event) => {
     }
     if (target.dataset.action === "edit-project-draft-task") {
         actions.updateProjectDraftTask(state, target.dataset.taskId, target.value);
+    }
+});
+document.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!target)
+        return;
+    if (target.dataset.action === "change-task-project") {
+        actions.updateTaskProject(state, target.dataset.taskId, target.value);
+        updateTaskModal();
+        return;
+    }
+    if (target.dataset.action === "change-task-due-date") {
+        actions.updateTaskDueDate(state, target.dataset.taskId, target.value);
+        updateTaskModal();
+        return;
+    }
+    if (target.dataset.action === "change-task-priority") {
+        actions.updateTaskPriority(state, target.dataset.taskId, target.value);
+        updateTaskModal();
     }
 });
 document.addEventListener("click", (event) => {
@@ -383,10 +503,48 @@ document.addEventListener("click", (event) => {
     }
     if (action === "toggle-subtask") {
         actions.toggleSubtask(state, taskId, actionElement.dataset.subtaskId);
+        render();
+        return;
+    }
+    if (action === "add-subtask") {
+        addModalSubtask(taskId);
+        return;
+    }
+    if (action === "open-subtask-composer") {
+        actions.openModalSubtaskComposer(state);
+        updateTaskModal();
+        focusModalSubtaskInput();
+        return;
+    }
+    if (action === "cancel-subtask-composer") {
+        actions.closeModalSubtaskComposer(state);
         updateTaskModal();
         return;
     }
+    if (action === "remove-subtask") {
+        actions.removeSubtask(state, taskId, actionElement.dataset.subtaskId);
+        render();
+        return;
+    }
+    if (action === "edit-task-card") {
+        actions.startTaskCardEdit(state, taskId);
+        renderMainView();
+        focusTaskCardTitle(taskId);
+        return;
+    }
+    if (action === "save-task-edit") {
+        actions.saveTaskCardEdit(state);
+        renderMainView();
+        return;
+    }
+    if (action === "cancel-task-edit") {
+        actions.cancelTaskCardEdit(state);
+        renderMainView();
+        return;
+    }
     if (action === "open-task") {
+        if (dragState.justDragged)
+            return;
         actions.openTaskModal(state, taskId);
         closeMobileChrome();
         updateTaskModal(true);
@@ -394,8 +552,7 @@ document.addEventListener("click", (event) => {
         return;
     }
     if (action === "close-modal") {
-        actions.closeTaskModal(state);
-        updateTaskModal();
+        closeTaskModalAndRender();
         return;
     }
     if (action === "assistant-suggestion") {
@@ -468,6 +625,61 @@ document.addEventListener("click", (event) => {
         renderChrome();
         return;
     }
+});
+document.addEventListener("dragstart", (event) => {
+    const target = event.target;
+    const row = target?.closest(".task-row[draggable='true']");
+    if (!row)
+        return;
+    dragState.taskId = row.dataset.taskId;
+    dragState.listId = row.dataset.taskList;
+    dragState.justDragged = false;
+    row.classList.add("task-dragging");
+    if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", row.dataset.taskId || "");
+    }
+});
+document.addEventListener("dragover", (event) => {
+    const target = event.target;
+    const row = target?.closest(".task-row[draggable='true']");
+    if (!row)
+        return;
+    if (!dragState.taskId || row.dataset.taskId === dragState.taskId)
+        return;
+    if (row.dataset.taskList !== dragState.listId)
+        return;
+    event.preventDefault();
+    clearTaskDropIndicators();
+    const rect = row.getBoundingClientRect();
+    const isAfter = event.clientY > rect.top + rect.height / 2;
+    row.classList.add(isAfter ? "task-drop-after" : "task-drop-before");
+});
+document.addEventListener("drop", (event) => {
+    const target = event.target;
+    const row = target?.closest(".task-row[draggable='true']");
+    if (!row || !dragState.taskId)
+        return;
+    if (row.dataset.taskId === dragState.taskId)
+        return;
+    if (row.dataset.taskList !== dragState.listId)
+        return;
+    event.preventDefault();
+    const rect = row.getBoundingClientRect();
+    const placement = event.clientY > rect.top + rect.height / 2 ? "after" : "before";
+    actions.reorderTask(state, dragState.taskId, row.dataset.taskId, placement);
+    suppressNextTaskListAnimation = true;
+    dragState.justDragged = true;
+    clearTaskDropIndicators();
+    render();
+});
+document.addEventListener("dragend", () => {
+    clearTaskDropIndicators();
+    dragState.taskId = null;
+    dragState.listId = null;
+    setTimeout(() => {
+        dragState.justDragged = false;
+    }, 0);
 });
 mobileViewport.addEventListener("change", (event) => {
     state.mobileNavOpen = false;

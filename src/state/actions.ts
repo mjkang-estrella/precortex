@@ -52,6 +52,7 @@ export function scheduleInboxTask(state, taskId, destination) {
 }
 
 export function toggleTask(state, taskId) {
+    cancelTaskCardEdit(state);
     const index = state.tasks.findIndex((task) => task.id === taskId);
     if (index === -1) return;
 
@@ -68,17 +69,106 @@ export function toggleTask(state, taskId) {
 }
 
 export function openTaskModal(state, taskId) {
+    cancelTaskCardEdit(state);
     state.modalTaskId = taskId;
+    state.modalSubtaskComposerOpen = false;
+    state.modalSubtaskDraft = "";
 }
 
 export function closeTaskModal(state) {
     state.modalTaskId = null;
+    state.modalSubtaskComposerOpen = false;
+    state.modalSubtaskDraft = "";
 }
 
 export function updateTaskField(state, taskId, field, value) {
     state.tasks = state.tasks.map((task) =>
         task.id === taskId ? { ...task, [field]: value } : task,
     );
+}
+
+export function updateTaskProject(state, taskId, projectId) {
+    const nextProjectId = projectId || null;
+    const project = nextProjectId
+        ? state.projects.find((item) => item.id === nextProjectId) || null
+        : null;
+
+    state.tasks = state.tasks.map((task) =>
+        task.id === taskId
+            ? {
+                  ...task,
+                  projectId: nextProjectId,
+                  project: project?.name || "inbox",
+              }
+            : task,
+    );
+}
+
+export function updateTaskDueDate(state, taskId, dueAt) {
+    state.tasks = state.tasks.map((task) =>
+        task.id === taskId
+            ? {
+                  ...task,
+                  dueAt: dueAt || null,
+              }
+            : task,
+    );
+}
+
+export function updateTaskPriority(state, taskId, priority) {
+    state.tasks = state.tasks.map((task) =>
+        task.id === taskId
+            ? {
+                  ...task,
+                  priority: priority || "none",
+              }
+            : task,
+    );
+}
+
+export function startTaskCardEdit(state, taskId) {
+    const task = state.tasks.find((item) => item.id === taskId);
+    if (!task) return;
+
+    state.editingTaskId = taskId;
+    state.editingTaskDraft = {
+        title: task.title,
+        description: task.description || "",
+    };
+}
+
+export function updateTaskCardDraftField(state, field, value) {
+    if (!state.editingTaskDraft) return;
+
+    state.editingTaskDraft = {
+        ...state.editingTaskDraft,
+        [field]: value,
+    };
+}
+
+export function saveTaskCardEdit(state) {
+    if (!state.editingTaskId || !state.editingTaskDraft) return;
+
+    const { title, description } = state.editingTaskDraft;
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return;
+
+    state.tasks = state.tasks.map((task) =>
+        task.id === state.editingTaskId
+            ? {
+                  ...task,
+                  title: trimmedTitle,
+                  description: description.trim(),
+              }
+            : task,
+    );
+
+    cancelTaskCardEdit(state);
+}
+
+export function cancelTaskCardEdit(state) {
+    state.editingTaskId = null;
+    state.editingTaskDraft = null;
 }
 
 export function toggleSubtask(state, taskId, subtaskId) {
@@ -94,8 +184,85 @@ export function toggleSubtask(state, taskId, subtaskId) {
     });
 }
 
+export function addTaskSubtask(state, taskId, title) {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return;
+
+    state.tasks = state.tasks.map((task) => {
+        if (task.id !== taskId) return task;
+
+        return {
+            ...task,
+            subtasks: [
+                ...task.subtasks,
+                {
+                    id: `subtask-${state.nextSubtaskId++}`,
+                    title: trimmedTitle,
+                    done: false,
+                },
+            ],
+        };
+    });
+
+    state.modalSubtaskComposerOpen = false;
+    state.modalSubtaskDraft = "";
+}
+
+export function updateSubtaskTitle(state, taskId, subtaskId, value) {
+    state.tasks = state.tasks.map((task) => {
+        if (task.id !== taskId) return task;
+
+        return {
+            ...task,
+            subtasks: task.subtasks.map((subtask) =>
+                subtask.id === subtaskId ? { ...subtask, title: value } : subtask,
+            ),
+        };
+    });
+}
+
+export function removeSubtask(state, taskId, subtaskId) {
+    state.tasks = state.tasks.map((task) => {
+        if (task.id !== taskId) return task;
+
+        return {
+            ...task,
+            subtasks: task.subtasks.filter((subtask) => subtask.id !== subtaskId),
+        };
+    });
+}
+
+export function reorderTask(state, taskId, targetTaskId, placement = "before") {
+    if (!taskId || !targetTaskId || taskId === targetTaskId) return;
+
+    const fromIndex = state.tasks.findIndex((task) => task.id === taskId);
+    const targetIndex = state.tasks.findIndex((task) => task.id === targetTaskId);
+    if (fromIndex === -1 || targetIndex === -1) return;
+
+    const [movedTask] = state.tasks.splice(fromIndex, 1);
+    const nextTargetIndex = state.tasks.findIndex((task) => task.id === targetTaskId);
+    const insertIndex = placement === "after" ? nextTargetIndex + 1 : nextTargetIndex;
+
+    state.tasks.splice(insertIndex, 0, movedTask);
+}
+
+export function openModalSubtaskComposer(state) {
+    state.modalSubtaskComposerOpen = true;
+    state.modalSubtaskDraft = "";
+}
+
+export function closeModalSubtaskComposer(state) {
+    state.modalSubtaskComposerOpen = false;
+    state.modalSubtaskDraft = "";
+}
+
+export function updateModalSubtaskDraft(state, value) {
+    state.modalSubtaskDraft = value;
+}
+
 export function setView(state, view) {
     if (view === state.currentView) return false;
+    cancelTaskCardEdit(state);
     state.currentView = view;
     if (view !== "project") {
         state.selectedProjectId = null;
@@ -104,6 +271,7 @@ export function setView(state, view) {
 }
 
 export function resetInbox(state, initialTasks) {
+    cancelTaskCardEdit(state);
     const preservedTasks = state.tasks.filter(
         (task) => task.status !== "todo" || task.dueAt || task.projectId,
     );
@@ -111,6 +279,7 @@ export function resetInbox(state, initialTasks) {
 }
 
 export function shiftUpcomingWeek(state, direction) {
+    cancelTaskCardEdit(state);
     const currentSelected = parseLocalISODate(state.selectedUpcomingDate);
     const nextSelected = addDays(currentSelected, direction * 7);
     state.selectedUpcomingDate = toLocalISODate(nextSelected);
@@ -119,6 +288,7 @@ export function shiftUpcomingWeek(state, direction) {
 }
 
 export function selectUpcomingDate(state, dateIso) {
+    cancelTaskCardEdit(state);
     const selectedDate = parseLocalISODate(dateIso);
     state.selectedUpcomingDate = dateIso;
     state.upcomingWeekStart = toLocalISODate(startOfWeekMonday(selectedDate));
@@ -126,6 +296,7 @@ export function selectUpcomingDate(state, dateIso) {
 }
 
 export function openProject(state, projectId) {
+    cancelTaskCardEdit(state);
     state.currentView = "project";
     state.selectedProjectId = projectId;
 }

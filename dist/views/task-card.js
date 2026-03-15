@@ -34,9 +34,11 @@ export function renderTaskBadges(task) {
     return badges.join("");
 }
 export function renderTaskCard(task, options = {}) {
-    const { anchorDate = null, index = 0 } = options;
+    const { anchorDate = null, index = 0, listId = "" } = options;
     const staggerDelay = Math.min(index * 40, 300);
     const isCompleted = task.status === "completed";
+    const isEditing = Boolean(options.editingDraft);
+    const editDraft = options.editingDraft;
     const badges = renderTaskBadges(task);
     const anchorAttribute = anchorDate ? `data-anchor-date="${anchorDate}"` : "";
     const rowClasses = isCompleted
@@ -48,10 +50,41 @@ export function renderTaskCard(task, options = {}) {
     const checkboxClasses = isCompleted
         ? "w-[22px] h-[22px] rounded-full border-2 border-stone-900 bg-stone-900 flex items-center justify-center transition-all"
         : "w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white group-hover:border-stone-400";
+    if (isEditing && editDraft) {
+        return `
+            <div class="task-row task-row-editing bg-white border border-stone-900/15 rounded-2xl p-5 flex flex-col gap-4 scroll-mt-6 shadow-sm" data-task-id="${task.id}" data-task-list="${listId}" ${anchorAttribute} style="animation-delay: ${staggerDelay}ms">
+                <div class="flex items-start gap-4">
+                    <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-1 flex-shrink-0" aria-label="${isCompleted ? "mark task incomplete" : "mark task complete"}" type="button">
+                        <div class="${checkboxClasses}">
+                            <svg class="w-3 h-3 text-white check-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </div>
+                    </button>
+                    <div class="flex-1 flex flex-col gap-3 min-w-0">
+                        <input data-action="edit-task-title" data-task-id="${task.id}" aria-label="edit task title" class="task-card-title-input w-full bg-transparent text-[15px] font-semibold text-stone-900 outline-none" value="${escapeHtml(editDraft.title)}">
+                        <textarea data-action="edit-task-description" data-task-id="${task.id}" aria-label="edit task description" class="task-card-description-input w-full bg-transparent text-[13px] leading-relaxed text-stone-600 outline-none resize-none" rows="${editDraft.description ? 2 : 1}" placeholder="Add a description...">${escapeHtml(editDraft.description)}</textarea>
+                    </div>
+                </div>
+                ${badges
+            ? `
+                    <div class="pl-[38px] flex flex-wrap items-center gap-2">
+                        ${badges}
+                    </div>
+                `
+            : ""}
+                <div class="pl-[38px] flex items-center justify-between gap-3 flex-wrap">
+                    <div class="text-[11px] font-medium text-stone-400 lowercase">editing task card</div>
+                    <div class="flex items-center gap-2">
+                        <button data-action="cancel-task-edit" class="px-3 py-1.5 rounded-xl border border-stone-200 text-[13px] font-medium text-stone-600 hover:border-stone-300 hover:text-stone-900 transition-colors lowercase" type="button">cancel</button>
+                        <button data-action="save-task-edit" class="px-3 py-1.5 rounded-xl bg-stone-900 text-white text-[13px] font-medium hover:bg-stone-700 transition-colors lowercase" type="button">save</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
     return `
-        <div class="${rowClasses}" data-action="open-task" data-task-id="${task.id}" ${anchorAttribute} style="animation-delay: ${staggerDelay}ms">
+        <div class="${rowClasses}" data-action="open-task" data-task-id="${task.id}" data-task-list="${listId}" draggable="true" ${anchorAttribute} style="animation-delay: ${staggerDelay}ms">
             <div class="flex items-start gap-4">
-                <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-0.5 flex-shrink-0" aria-label="${isCompleted ? "mark task incomplete" : "mark task complete"}">
+                <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-0.5 flex-shrink-0" aria-label="${isCompleted ? "mark task incomplete" : "mark task complete"}" type="button">
                     <div class="${checkboxClasses}">
                         <svg class="w-3 h-3 text-white check-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     </div>

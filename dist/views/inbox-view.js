@@ -37,12 +37,39 @@ function renderInboxMetadata(task) {
     }
     return items.join("");
 }
-function renderInboxTaskRow(task, index = 0) {
+function renderInboxTaskRow(task, index = 0, editingDraft = null) {
     const staggerDelay = Math.min(index * 40, 300);
+    if (editingDraft) {
+        return `
+            <div class="task-row task-row-editing bg-white border border-stone-900/15 rounded-2xl p-5 flex flex-col gap-4 shadow-sm" data-task-id="${task.id}" data-task-list="inbox" style="animation-delay: ${staggerDelay}ms">
+                <div class="flex items-start gap-4">
+                    <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-1 flex-shrink-0" aria-label="mark task complete" type="button">
+                        <div class="w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white">
+                            <svg class="w-3 h-3 text-white check-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </div>
+                    </button>
+                    <div class="flex-1 flex flex-col gap-3 min-w-0">
+                        <input data-action="edit-task-title" data-task-id="${task.id}" aria-label="edit task title" class="task-card-title-input w-full bg-transparent text-[16px] font-medium text-stone-900 outline-none" value="${escapeHtml(editingDraft.title)}">
+                        <textarea data-action="edit-task-description" data-task-id="${task.id}" aria-label="edit task description" class="task-card-description-input w-full bg-transparent text-[13px] leading-relaxed text-stone-600 outline-none resize-none" rows="${editingDraft.description ? 2 : 1}" placeholder="Add a description...">${escapeHtml(editingDraft.description)}</textarea>
+                        <div class="flex flex-wrap items-center gap-2 text-xs">
+                            ${renderInboxMetadata(task)}
+                        </div>
+                    </div>
+                </div>
+                <div class="pl-[38px] flex items-center justify-between gap-3 flex-wrap">
+                    <div class="text-[11px] font-medium text-stone-400 lowercase">editing task card</div>
+                    <div class="flex items-center gap-2">
+                        <button data-action="cancel-task-edit" class="px-3 py-1.5 rounded-xl border border-stone-200 text-[13px] font-medium text-stone-600 hover:border-stone-300 hover:text-stone-900 transition-colors lowercase" type="button">cancel</button>
+                        <button data-action="save-task-edit" class="px-3 py-1.5 rounded-xl bg-stone-900 text-white text-[13px] font-medium hover:bg-stone-700 transition-colors lowercase" type="button">save</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
     return `
-        <div class="task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col xl:flex-row gap-4 hover:border-stone-400 hover:bg-stone-50/50 cursor-pointer transition-colors" data-action="open-task" data-task-id="${task.id}" style="animation-delay: ${staggerDelay}ms">
+        <div class="task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col xl:flex-row gap-4 hover:border-stone-400 hover:bg-stone-50/50 cursor-pointer transition-colors" data-action="open-task" data-task-id="${task.id}" data-task-list="inbox" draggable="true" style="animation-delay: ${staggerDelay}ms">
             <div class="flex flex-1 items-start gap-4">
-                <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-1 flex-shrink-0" aria-label="mark task complete">
+                <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-1 flex-shrink-0" aria-label="mark task complete" type="button">
                     <div class="w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white group-hover:border-stone-400">
                         <svg class="w-3 h-3 text-white check-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     </div>
@@ -75,7 +102,7 @@ function renderInboxTaskRow(task, index = 0) {
         </div>
     `;
 }
-export function renderInboxView({ inboxTasks }) {
+export function renderInboxView({ inboxTasks, editingTaskId, editingTaskDraft }) {
     const count = inboxTasks.length;
     const countLabel = `${count} item${count === 1 ? "" : "s"}`;
     return `
@@ -100,7 +127,9 @@ export function renderInboxView({ inboxTasks }) {
                 ${count
         ? `
                     <div class="flex flex-col gap-2">
-                        ${inboxTasks.map((task, i) => renderInboxTaskRow(task, i)).join("")}
+                        ${inboxTasks
+            .map((task, i) => renderInboxTaskRow(task, i, editingTaskId === task.id ? editingTaskDraft : null))
+            .join("")}
                     </div>
                 `
         : `

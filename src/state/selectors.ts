@@ -101,11 +101,9 @@ export function getTaskDueMeta(task) {
 }
 
 export function getTodayTasks(state) {
-    return sortTasksByDueDate(
-        state.tasks.filter(
-            (task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff <= 0,
-        ),
-    ).map((task) => decorateTask(state, task));
+    return state.tasks
+        .filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff <= 0)
+        .map((task) => decorateTask(state, task));
 }
 
 export function getCompletedTasks(state) {
@@ -119,11 +117,9 @@ export function getInboxCount(state) {
 }
 
 export function getFutureTodoTasks(state) {
-    return sortTasksByDueDate(
-        state.tasks.filter(
-            (task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff > 0,
-        ),
-    ).map((task) => decorateTask(state, task));
+    return state.tasks
+        .filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff > 0)
+        .map((task) => decorateTask(state, task));
 }
 
 export function getUpcomingSectionKey(date) {
@@ -191,9 +187,9 @@ export function getSelectedProject(state) {
 }
 
 export function getProjectTasks(state, projectId) {
-    return sortTasksByDueDate(
-        state.tasks.filter((task) => task.projectId === projectId && task.status === "todo"),
-    ).map((task) => decorateTask(state, task));
+    return state.tasks
+        .filter((task) => task.projectId === projectId && task.status === "todo")
+        .map((task) => decorateTask(state, task));
 }
 
 export function getProjectCompletedTasks(state, projectId) {

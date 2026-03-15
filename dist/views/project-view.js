@@ -8,7 +8,7 @@ function renderDeadline(deadline) {
         return deadline.toLowerCase();
     return formatters.modalDate.format(parseLocalISODate(deadline)).toLowerCase();
 }
-export function renderProjectView({ project, todoTasks, completedTasks }) {
+export function renderProjectView({ project, todoTasks, completedTasks, editingTaskId, editingTaskDraft }) {
     return `
         <div class="h-full flex flex-col min-h-0">
             <header class="px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-start lg:gap-6 flex-shrink-0 z-10 bg-white">
@@ -42,7 +42,13 @@ export function renderProjectView({ project, todoTasks, completedTasks }) {
             <div class="flex-1 overflow-y-auto px-4 pb-24 sm:px-6 sm:pb-10 lg:px-10 flex flex-col">
                 <div class="flex flex-col gap-2">
                     ${todoTasks.length
-        ? todoTasks.map((task, i) => renderTaskCard(task, { index: i })).join("")
+        ? todoTasks
+            .map((task, i) => renderTaskCard(task, {
+            index: i,
+            listId: "project-todo",
+            editingDraft: editingTaskId === task.id ? editingTaskDraft : null,
+        }))
+            .join("")
         : '<div class="rounded-[24px] border border-dashed border-stone-300 bg-stone-50/70 p-6 text-[14px] text-stone-500 lowercase">No active project tasks yet.</div>'}
                 </div>
                 <div class="flex items-center gap-4 mt-10 mb-3">
@@ -51,7 +57,13 @@ export function renderProjectView({ project, todoTasks, completedTasks }) {
                 </div>
                 <div class="flex flex-col gap-2">
                     ${completedTasks.length
-        ? completedTasks.map((task, i) => renderTaskCard(task, { index: i })).join("")
+        ? completedTasks
+            .map((task, i) => renderTaskCard(task, {
+            index: i,
+            listId: "project-completed",
+            editingDraft: editingTaskId === task.id ? editingTaskDraft : null,
+        }))
+            .join("")
         : '<div class="text-[13px] text-stone-300 lowercase">No completed project tasks yet.</div>'}
                 </div>
             </div>

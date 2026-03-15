@@ -82,15 +82,14 @@
                 </button>
             </nav>
 
-            <div class="mt-8 px-7 mb-2 text-xs font-semibold text-stone-400 lowercase tracking-wider" vid="33">projects</div>
-            
-            <nav id="projectNav" class="px-3 flex flex-col gap-1 flex-1" vid="34"></nav>
-            <div class="px-3 pb-2">
-                <button data-action="open-project-setup" class="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm border border-dashed border-stone-300 text-stone-500 hover:text-stone-900 hover:border-stone-400 hover:bg-stone-50 transition-all lowercase" vid="41">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vid="42"><line x1="12" y1="5" x2="12" y2="19" vid="43"></line><line x1="5" y1="12" x2="19" y2="12" vid="44"></line></svg>
-                    add a project
+            <div class="mt-8 px-7 mb-2 flex items-center justify-between gap-3" vid="33">
+                <div class="text-xs font-semibold text-stone-400 lowercase tracking-wider">projects</div>
+                <button data-action="open-project-setup" class="w-7 h-7 rounded-full border border-stone-200 bg-white text-stone-400 hover:text-stone-900 hover:border-stone-400 hover:bg-stone-50 transition-colors flex items-center justify-center" aria-label="add project" type="button">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
             </div>
+            
+            <nav id="projectNav" class="px-3 flex flex-col gap-1 flex-1" vid="34"></nav>
 
         </div>
     </aside>

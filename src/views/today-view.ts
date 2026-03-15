@@ -1,6 +1,6 @@
 import { renderTaskCard } from "./task-card.js";
 
-export function renderTodayView({ todoTasks, completedTasks }) {
+export function renderTodayView({ todoTasks, completedTasks, editingTaskId, editingTaskDraft }) {
     return `
         <div class="h-full flex flex-col min-h-0">
             <header class="px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8 flex-shrink-0 z-10 bg-white">
@@ -16,7 +16,15 @@ export function renderTodayView({ todoTasks, completedTasks }) {
                 <div class="flex flex-col gap-2">
                     ${
                         todoTasks.length
-                            ? todoTasks.map((task, i) => renderTaskCard(task, { index: i })).join("")
+                            ? todoTasks
+                                  .map((task, i) =>
+                                      renderTaskCard(task, {
+                                          index: i,
+                                          listId: "today-todo",
+                                          editingDraft: editingTaskId === task.id ? editingTaskDraft : null,
+                                      }),
+                                  )
+                                  .join("")
                             : '<div class="rounded-[24px] border border-dashed border-stone-300 bg-stone-50/70 p-6 text-[14px] text-stone-500 lowercase">No overdue or due-today tasks right now.</div>'
                     }
                 </div>
@@ -27,7 +35,15 @@ export function renderTodayView({ todoTasks, completedTasks }) {
                 <div class="flex flex-col gap-2">
                     ${
                         completedTasks.length
-                            ? completedTasks.map((task, i) => renderTaskCard(task, { index: i })).join("")
+                            ? completedTasks
+                                  .map((task, i) =>
+                                      renderTaskCard(task, {
+                                          index: i,
+                                          listId: "today-completed",
+                                          editingDraft: editingTaskId === task.id ? editingTaskDraft : null,
+                                      }),
+                                  )
+                                  .join("")
                             : '<div class="text-[13px] text-stone-300 lowercase">No completed tasks yet.</div>'
                     }
                 </div>

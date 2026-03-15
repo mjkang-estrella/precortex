@@ -8,6 +8,7 @@ export function createStore() {
     const initialTasks = buildInitialTasks();
     const initialProjects = buildInitialProjects();
     const initialInboxCount = initialTasks.filter((task) => task.status === "todo" && !task.dueAt).length;
+    const initialSubtaskCount = initialTasks.reduce((count, task) => count + task.subtasks.length, 0);
     const assistantConfigs = createAssistantConfigs(initialInboxCount);
     return {
         initialTasks,
@@ -24,8 +25,13 @@ export function createStore() {
             assistantOpen: true,
             mobileNavOpen: false,
             modalTaskId: null,
+            modalSubtaskComposerOpen: false,
+            modalSubtaskDraft: "",
+            editingTaskId: null,
+            editingTaskDraft: null,
             projectSetup: createProjectSetupState(),
             nextTaskId: initialTasks.length + 1,
+            nextSubtaskId: initialSubtaskCount + 1,
             nextProjectId: initialProjects.length + 1,
             pendingUpcomingScrollTarget: null,
         },
