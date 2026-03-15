@@ -6,7 +6,7 @@ function renderSetupMessages(messages) {
         if (message.sender === "user") {
             return `
                     <div class="flex justify-end">
-                        <div class="max-w-[80%] rounded-[20px] rounded-tr-[6px] bg-stone-900 text-white px-4 py-3 text-[14px] leading-relaxed lowercase">
+                        <div class="max-w-[80%] rounded-[20px] rounded-tr-[6px] bg-stone-900 text-white px-4 py-3 text-[14px] leading-relaxed">
                             ${escapeHtml(message.text)}
                         </div>
                     </div>
@@ -14,7 +14,7 @@ function renderSetupMessages(messages) {
         }
         return `
                 <div class="flex justify-start">
-                    <div class="max-w-[88%] rounded-[24px] rounded-tl-[6px] bg-stone-100 border border-stone-200/60 text-stone-800 px-4 py-3 text-[14px] leading-relaxed lowercase">
+                    <div class="max-w-[88%] rounded-[24px] rounded-tl-[6px] bg-stone-100 border border-stone-200/60 text-stone-800 px-4 py-3 text-[14px] leading-relaxed">
                         ${escapeHtml(message.text)}
                     </div>
                 </div>
@@ -41,21 +41,21 @@ function renderReview(draft) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label class="flex flex-col gap-2">
                     <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">project name</span>
-                    <input id="projectDraftName" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 lowercase outline-none focus:border-stone-400" value="${escapeHtml(draft.name)}">
+                    <input id="projectDraftName" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none focus:border-stone-400" value="${escapeHtml(draft.name)}">
                 </label>
                 <label class="flex flex-col gap-2">
                     <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">deadline</span>
-                    <input id="projectDraftDeadline" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 lowercase outline-none focus:border-stone-400" value="${escapeHtml(draft.deadline)}">
+                    <input id="projectDraftDeadline" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none focus:border-stone-400" value="${escapeHtml(draft.deadline)}">
                     <span class="text-[12px] text-stone-400 lowercase">${escapeHtml(formatDraftDeadline(draft.deadline))}</span>
                 </label>
             </div>
             <label class="flex flex-col gap-2">
                 <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">summary</span>
-                <textarea id="projectDraftSummary" class="min-h-[120px] rounded-[24px] border border-stone-200 bg-white px-4 py-3 text-[14px] leading-relaxed text-stone-900 lowercase outline-none resize-none focus:border-stone-400">${escapeHtml(draft.summary)}</textarea>
+                <textarea id="projectDraftSummary" class="min-h-[120px] rounded-[24px] border border-stone-200 bg-white px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none resize-none focus:border-stone-400">${escapeHtml(draft.summary)}</textarea>
             </label>
             <label class="flex flex-col gap-2">
                 <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">next step</span>
-                <input id="projectDraftNextStep" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 lowercase outline-none focus:border-stone-400" value="${escapeHtml(draft.nextStep)}">
+                <input id="projectDraftNextStep" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none focus:border-stone-400" value="${escapeHtml(draft.nextStep)}">
             </label>
             <div class="flex flex-col gap-3">
                 <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">starter tasks</div>
@@ -66,7 +66,7 @@ function renderReview(draft) {
                                 <input
                                     data-action="edit-project-draft-task"
                                     data-task-id="${task.id}"
-                                    class="w-full bg-transparent border-none outline-none text-[14px] text-stone-900 lowercase"
+                                    class="w-full bg-transparent border-none outline-none text-[14px] text-stone-900"
                                     value="${escapeHtml(task.title)}"
                                 >
                             </div>
@@ -113,7 +113,7 @@ export function renderProjectSetupModal({ projectSetupModal, projectSetup }) {
                         </div>
                         <div class="border-t border-stone-100 p-4 bg-white">
                             <div class="group border border-stone-200 bg-white rounded-[24px] flex items-end p-1.5 focus-within:border-stone-500 focus-within:shadow-sm transition-all">
-                                <textarea id="projectSetupInput" aria-label="reply to bay" class="flex-1 bg-transparent border-none outline-none text-[14px] placeholder-stone-400 text-stone-900 py-2.5 pl-4 pr-2 resize-none max-h-[120px] overflow-y-auto lowercase" rows="1" placeholder="answer bay..."></textarea>
+                                <textarea id="projectSetupInput" aria-label="reply to bay" class="flex-1 bg-transparent border-none outline-none text-[14px] placeholder-stone-400 text-stone-900 py-2.5 pl-4 pr-2 resize-none max-h-[120px] overflow-y-auto" rows="1" placeholder="answer bay..."></textarea>
                                 <button data-action="send-project-setup" aria-label="send message" class="w-9 h-9 flex-shrink-0 rounded-full bg-stone-900 text-white flex items-center justify-center hover:scale-105 transition-transform shadow-sm mb-0.5 mr-0.5" type="button">
                                     <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                                 </button>

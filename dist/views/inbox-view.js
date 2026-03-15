@@ -81,9 +81,9 @@ export function renderInboxView({ inboxTasks }) {
     return `
         <div class="h-full flex flex-col min-h-0">
             <header class="px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8 flex-shrink-0 z-10 bg-white">
-                <h1 class="text-3xl sm:text-4xl font-medium tracking-tighter lowercase flex items-center gap-3 sm:gap-4">
+                <h1 class="font-display text-4xl sm:text-5xl tracking-tight lowercase flex items-baseline gap-4">
                     inbox
-                    <span class="text-lg text-stone-400 font-normal">${countLabel}</span>
+                    <span class="text-sm text-stone-400 font-sans font-medium tracking-wider">${countLabel}</span>
                 </h1>
             </header>
             ${count
@@ -91,7 +91,7 @@ export function renderInboxView({ inboxTasks }) {
                 <div class="px-4 pb-4 sm:px-6 sm:pb-5 lg:px-10 lg:pb-6 flex-shrink-0 z-10 bg-white">
                     <div class="group flex items-center gap-3 bg-stone-50 rounded-2xl px-5 py-4 border border-stone-200/60 focus-within:border-stone-400 focus-within:bg-white focus-within:shadow-sm transition-all">
                         <svg class="w-5 h-5 text-stone-400 group-focus-within:text-stone-900 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        <input id="taskInput" type="text" aria-label="add task to inbox" class="flex-1 bg-transparent border-none outline-none text-[15px] placeholder-stone-400 text-stone-900 lowercase" placeholder="add to inbox to sort later...">
+                        <input id="taskInput" type="text" aria-label="add task to inbox" class="flex-1 bg-transparent border-none outline-none text-[15px] placeholder-stone-400 text-stone-900" placeholder="add to inbox to sort later...">
                     </div>
                 </div>
             `
@@ -99,7 +99,7 @@ export function renderInboxView({ inboxTasks }) {
             <div class="flex-1 overflow-y-auto px-4 pb-24 sm:px-6 sm:pb-10 lg:px-10 flex flex-col relative">
                 ${count
         ? `
-                    <div class="flex flex-col gap-3">
+                    <div class="flex flex-col gap-2">
                         ${inboxTasks.map((task, i) => renderInboxTaskRow(task, i)).join("")}
                     </div>
                 `
@@ -108,7 +108,7 @@ export function renderInboxView({ inboxTasks }) {
                         <div class="w-24 h-24 mb-6 text-stone-200 bg-stone-50 rounded-full flex items-center justify-center border border-stone-100 empty-icon shadow-soft">
                             <svg class="w-10 h-10 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                         </div>
-                        <h2 class="text-2xl font-medium text-stone-900 mb-2 lowercase tracking-tight">inbox zero. nice work.</h2>
+                        <h2 class="font-display text-3xl text-stone-900 mb-2 lowercase tracking-tight">inbox zero. nice work.</h2>
                         <p class="text-stone-500 text-sm max-w-[280px] lowercase leading-relaxed">you've triaged all your unscheduled tasks. enjoy the peace of mind.</p>
                         <button data-action="reset-inbox" class="mt-8 px-6 py-2.5 rounded-xl bg-stone-900 text-white text-sm font-medium hover:scale-105 transition-transform shadow-sm lowercase" type="button">
                             bring them back

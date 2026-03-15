@@ -7,7 +7,7 @@ function renderMessages({ messages, senderLabel, aiMessages }) {
                 return `
                     <div class="flex flex-col items-end max-w-[90%] self-end">
                         <div class="text-[11px] font-semibold text-stone-400 mb-1.5 lowercase pr-1">you</div>
-                        <div class="bg-stone-900 text-white px-5 py-3.5 rounded-[20px] rounded-tr-[4px] text-[14px] leading-relaxed lowercase">
+                        <div class="bg-stone-900 text-white px-5 py-3.5 rounded-[20px] rounded-tr-[4px] text-[14px] leading-relaxed">
                             ${escapeHtml(message.text)}
                         </div>
                     </div>

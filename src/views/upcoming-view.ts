@@ -15,13 +15,15 @@ function renderUpcomingSection(sectionKey, title, tasks) {
         .join("");
 
     return `
-        <div class="flex items-center gap-4 mt-6 mb-2 sticky top-0 bg-white/90 backdrop-blur-sm z-20 py-2 scroll-mt-6" data-anchor-section="${sectionKey}">
-            <div class="text-xs font-semibold ${
-                sectionKey === "tomorrow" ? "text-stone-900" : "text-stone-400"
-            } lowercase tracking-wider flex-shrink-0">${title}</div>
-            <div class="h-px bg-stone-200 flex-1"></div>
+        <div class="flex items-center gap-4 mt-10 mb-3 sticky top-0 bg-white/90 backdrop-blur-sm z-20 py-2 scroll-mt-6" data-anchor-section="${sectionKey}">
+            <div class="${
+                sectionKey === "tomorrow" ? "font-display text-lg text-stone-900" : "text-[11px] font-medium text-stone-300 tracking-widest"
+            } lowercase flex-shrink-0">${title}</div>
+            <div class="h-px bg-stone-100 flex-1"></div>
         </div>
-        ${cards}
+        <div class="flex flex-col gap-2">
+            ${cards}
+        </div>
     `;
 }
 
@@ -31,7 +33,7 @@ export function renderUpcomingView({ weekDays, groups }) {
     return `
         <div class="h-full flex flex-col min-h-0">
             <header class="px-4 py-4 pb-3 sm:px-6 sm:py-6 lg:px-10 lg:py-8 lg:pb-4 flex flex-col gap-4 sm:gap-6 flex-shrink-0 z-10 bg-white">
-                <h1 class="text-3xl sm:text-4xl font-medium tracking-tighter lowercase">upcoming</h1>
+                <h1 class="font-display text-4xl sm:text-5xl tracking-tight lowercase">upcoming</h1>
                 <div class="flex items-center justify-between gap-1 sm:gap-2 px-0 sm:px-2 py-1">
                     <button data-action="shift-week" data-direction="-1" aria-label="previous week" class="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors" type="button">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
@@ -73,7 +75,7 @@ export function renderUpcomingView({ weekDays, groups }) {
                     </button>
                 </div>
             </header>
-            <div id="upcomingScrollArea" class="flex-1 overflow-y-auto px-4 pb-24 sm:px-6 sm:pb-10 lg:px-10 flex flex-col gap-3">
+            <div id="upcomingScrollArea" class="flex-1 overflow-y-auto px-4 pb-24 sm:px-6 sm:pb-10 lg:px-10 flex flex-col">
                 ${
                     hasUpcomingTasks
                         ? `

@@ -17,8 +17,8 @@ export function renderProjectView({ project, todoTasks, completedTasks }) {
                         <span class="w-2 h-2 rounded-full bg-stone-900"></span>
                         bay project
                     </div>
-                    <h1 class="text-3xl sm:text-4xl font-medium tracking-tighter lowercase">${escapeHtml(project.name)}</h1>
-                    <p class="text-[15px] leading-relaxed text-stone-500 lowercase max-w-3xl">${escapeHtml(project.summary)}</p>
+                    <h1 class="font-display text-4xl sm:text-5xl tracking-tight">${escapeHtml(project.name)}</h1>
+                    <p class="text-[14px] leading-relaxed text-stone-400 max-w-3xl">${escapeHtml(project.summary)}</p>
                 </div>
                 <div class="flex flex-col items-start lg:items-end gap-2">
                     <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">deadline</span>
@@ -31,28 +31,28 @@ export function renderProjectView({ project, todoTasks, completedTasks }) {
                 <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] gap-4">
                     <div class="rounded-2xl border border-stone-200 bg-stone-50/70 p-6 flex flex-col gap-2">
                         <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400">next step</div>
-                        <div class="text-[22px] font-medium tracking-tight lowercase text-stone-900">${escapeHtml(project.nextStep)}</div>
+                        <div class="font-display text-2xl tracking-tight text-stone-900">${escapeHtml(project.nextStep)}</div>
                     </div>
                     <div class="group flex items-center gap-3 bg-stone-50 rounded-2xl px-5 py-4 border border-stone-200/60 focus-within:border-stone-400 focus-within:bg-white focus-within:shadow-sm transition-all">
                         <svg class="w-5 h-5 text-stone-400 group-focus-within:text-stone-900 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        <input id="taskInput" type="text" aria-label="add task to project" class="flex-1 bg-transparent border-none outline-none text-[15px] placeholder-stone-400 text-stone-900 lowercase" placeholder="add another task to this project...">
+                        <input id="taskInput" type="text" aria-label="add task to project" class="flex-1 bg-transparent border-none outline-none text-[15px] placeholder-stone-400 text-stone-900" placeholder="add another task to this project...">
                     </div>
                 </div>
             </div>
-            <div class="flex-1 overflow-y-auto px-4 pb-24 sm:px-6 sm:pb-10 lg:px-10 flex flex-col gap-3">
-                <div class="flex flex-col gap-3">
+            <div class="flex-1 overflow-y-auto px-4 pb-24 sm:px-6 sm:pb-10 lg:px-10 flex flex-col">
+                <div class="flex flex-col gap-2">
                     ${todoTasks.length
         ? todoTasks.map((task, i) => renderTaskCard(task, { index: i })).join("")
         : '<div class="rounded-[24px] border border-dashed border-stone-300 bg-stone-50/70 p-6 text-[14px] text-stone-500 lowercase">No active project tasks yet.</div>'}
                 </div>
-                <div class="flex items-center gap-4 mt-6 mb-2">
-                    <div class="text-xs font-semibold text-stone-400 lowercase tracking-wider flex-shrink-0">completed (${completedTasks.length})</div>
-                    <div class="h-px bg-stone-200 flex-1"></div>
+                <div class="flex items-center gap-4 mt-10 mb-3">
+                    <div class="text-[11px] font-medium text-stone-300 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</div>
+                    <div class="h-px bg-stone-100 flex-1"></div>
                 </div>
-                <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-2">
                     ${completedTasks.length
         ? completedTasks.map((task, i) => renderTaskCard(task, { index: i })).join("")
-        : '<div class="text-[13px] text-stone-400 lowercase">No completed project tasks yet.</div>'}
+        : '<div class="text-[13px] text-stone-300 lowercase">No completed project tasks yet.</div>'}
                 </div>
             </div>
         </div>

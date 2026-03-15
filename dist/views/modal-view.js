@@ -46,10 +46,10 @@ export function renderTaskModal({ taskModal, task, animate = false }) {
         ? '<svg class="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
         : ""}
                         </button>
-                        <textarea id="modalTitleInput" data-task-id="${task.id}" aria-label="task title" class="text-3xl font-medium text-stone-900 w-full outline-none resize-none lowercase bg-transparent placeholder-stone-300 tracking-tight" rows="2" placeholder="task name">${escapeHtml(task.title)}</textarea>
+                        <textarea id="modalTitleInput" data-task-id="${task.id}" aria-label="task title" class="font-display text-3xl text-stone-900 w-full outline-none resize-none bg-transparent placeholder-stone-300 tracking-tight" rows="2" placeholder="task name">${escapeHtml(task.title)}</textarea>
                     </div>
                     <div class="pl-[38px] flex flex-col gap-2">
-                        <textarea id="modalDescriptionInput" data-task-id="${task.id}" aria-label="task description" class="w-full bg-transparent text-[15px] leading-relaxed text-stone-600 outline-none resize-none min-h-[100px] lowercase placeholder-stone-400" placeholder="add a description...">${escapeHtml(task.description || "")}</textarea>
+                        <textarea id="modalDescriptionInput" data-task-id="${task.id}" aria-label="task description" class="w-full bg-transparent text-[15px] leading-relaxed text-stone-600 outline-none resize-none min-h-[100px] placeholder-stone-400" placeholder="add a description...">${escapeHtml(task.description || "")}</textarea>
                     </div>
                     <div class="pl-[38px] flex flex-col gap-3">
                         <div class="flex items-center justify-between mb-1">
@@ -68,7 +68,7 @@ export function renderTaskModal({ taskModal, task, animate = false }) {
             ? '<svg class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
             : ""}
                                         </button>
-                                        <div class="text-[14px] ${subtask.done ? "text-stone-500 line-through" : "text-stone-800"} lowercase">${escapeHtml(subtask.title)}</div>
+                                        <div class="text-[14px] ${subtask.done ? "text-stone-500 line-through" : "text-stone-800"}">${escapeHtml(subtask.title)}</div>
                                     </div>
                                 `)
             .join("")

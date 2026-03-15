@@ -43,8 +43,8 @@ export function renderTaskCard(task, options = {}) {
         ? "task-row completed group bg-stone-50 rounded-2xl p-5 flex flex-col gap-3 transition-colors cursor-pointer scroll-mt-6"
         : "task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col gap-3 hover:border-stone-400 hover:bg-stone-50/50 transition-colors cursor-pointer scroll-mt-6";
     const titleClasses = isCompleted
-        ? "text-[16px] text-stone-400 font-medium line-through task-title"
-        : "text-[16px] text-stone-900 font-medium transition-colors duration-200 task-title";
+        ? "text-[15px] text-stone-400 font-medium line-through task-title"
+        : "text-[15px] text-stone-900 font-semibold transition-colors duration-200 task-title";
     const checkboxClasses = isCompleted
         ? "w-[22px] h-[22px] rounded-full border-2 border-stone-900 bg-stone-900 flex items-center justify-center transition-all"
         : "w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white group-hover:border-stone-400";
@@ -59,7 +59,7 @@ export function renderTaskCard(task, options = {}) {
                 <div class="flex-1 flex flex-col justify-center gap-1.5 pt-0.5">
                     <div class="${titleClasses}">${escapeHtml(task.title)}</div>
                     ${task.description
-        ? `<p class="text-[13px] ${isCompleted ? "text-stone-400" : "text-stone-500"} leading-relaxed line-clamp-1 lowercase">${escapeHtml(task.description)}</p>`
+        ? `<p class="text-[13px] ${isCompleted ? "text-stone-400" : "text-stone-500"} leading-relaxed line-clamp-1">${escapeHtml(task.description)}</p>`
         : ""}
                 </div>
             </div>
