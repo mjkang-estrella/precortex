@@ -44,15 +44,16 @@ export function renderTaskBadges(task) {
     return badges.join("");
 }
 
-export function renderTaskCard(task, options: { anchorDate?: string | null } = {}) {
-    const { anchorDate = null } = options;
+export function renderTaskCard(task, options: { anchorDate?: string | null; index?: number } = {}) {
+    const { anchorDate = null, index = 0 } = options;
+    const staggerDelay = Math.min(index * 40, 300);
     const isCompleted = task.status === "completed";
     const badges = renderTaskBadges(task);
     const anchorAttribute = anchorDate ? `data-anchor-date="${anchorDate}"` : "";
 
     const rowClasses = isCompleted
-        ? "task-row completed group bg-stone-50 border border-transparent rounded-[20px] p-5 flex flex-col gap-3 transition-all relative cursor-pointer scroll-mt-6"
-        : "task-row group bg-white border border-stone-200 rounded-[20px] p-5 flex flex-col gap-3 hover:border-stone-400 hover:shadow-soft transition-all relative overflow-hidden cursor-pointer scroll-mt-6";
+        ? "task-row completed group bg-stone-50 rounded-2xl p-5 flex flex-col gap-3 transition-colors cursor-pointer scroll-mt-6"
+        : "task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col gap-3 hover:border-stone-400 hover:bg-stone-50/50 transition-colors cursor-pointer scroll-mt-6";
     const titleClasses = isCompleted
         ? "text-[16px] text-stone-400 font-medium line-through task-title"
         : "text-[16px] text-stone-900 font-medium transition-colors duration-200 task-title";
@@ -61,9 +62,8 @@ export function renderTaskCard(task, options: { anchorDate?: string | null } = {
         : "w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white group-hover:border-stone-400";
 
     return `
-        <div class="${rowClasses}" data-action="open-task" data-task-id="${task.id}" ${anchorAttribute}>
-            ${isCompleted ? "" : '<div class="absolute inset-0 bg-stone-50/0 group-hover:bg-stone-50/50 transition-colors pointer-events-none"></div>'}
-            <div class="relative z-10 flex items-start gap-4">
+        <div class="${rowClasses}" data-action="open-task" data-task-id="${task.id}" ${anchorAttribute} style="animation-delay: ${staggerDelay}ms">
+            <div class="flex items-start gap-4">
                 <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-0.5 flex-shrink-0" aria-label="${
                     isCompleted ? "mark task incomplete" : "mark task complete"
                 }">
@@ -87,7 +87,7 @@ export function renderTaskCard(task, options: { anchorDate?: string | null } = {
             ${
                 !isCompleted && badges
                     ? `
-                <div class="pl-[38px] flex flex-wrap items-center gap-2 relative z-10">
+                <div class="pl-[38px] flex flex-wrap items-center gap-2">
                     ${badges}
                 </div>
             `

@@ -131,13 +131,11 @@ function renderChrome() {
     dom.assistantPanel.classList.toggle("lg:w-[340px]", state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:opacity-100", state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:scale-100", state.assistantOpen);
-    dom.assistantPanel.classList.toggle("lg:border-white/60", state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:w-0", !state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:opacity-0", !state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:translate-x-6", !state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:scale-[0.98]", !state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:pointer-events-none", !state.assistantOpen);
-    dom.assistantPanel.classList.toggle("lg:border-transparent", !state.assistantOpen);
     const showNavButton = mobile && !state.mobileNavOpen && !blockingSurfaceOpen;
     dom.openNavButton.classList.toggle("opacity-100", showNavButton);
     dom.openNavButton.classList.toggle("translate-y-0", showNavButton);
@@ -358,11 +356,27 @@ document.addEventListener("click", (event) => {
         return;
     }
     if (action === "schedule-task") {
-        actions.scheduleInboxTask(state, taskId, destination);
-        render();
+        const row = actionElement.closest(".task-row");
+        if (row) {
+            row.classList.add("task-removing");
+            setTimeout(() => {
+                actions.scheduleInboxTask(state, taskId, destination);
+                render();
+            }, 250);
+        }
+        else {
+            actions.scheduleInboxTask(state, taskId, destination);
+            render();
+        }
         return;
     }
     if (action === "toggle" || action === "modal-toggle-task") {
+        const row = action === "toggle"
+            ? actionElement.closest(".task-row")
+            : null;
+        if (row) {
+            row.classList.add("task-completing");
+        }
         actions.toggleTask(state, taskId);
         render();
         return;

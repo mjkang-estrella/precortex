@@ -37,11 +37,11 @@ function renderInboxMetadata(task) {
     }
     return items.join("");
 }
-function renderInboxTaskRow(task) {
+function renderInboxTaskRow(task, index = 0) {
+    const staggerDelay = Math.min(index * 40, 300);
     return `
-        <div class="task-row group bg-white border border-stone-200 rounded-[20px] p-5 flex flex-col xl:flex-row gap-4 hover:border-stone-400 hover:shadow-soft cursor-pointer relative overflow-visible transition-all" data-action="open-task" data-task-id="${task.id}">
-            <div class="absolute inset-0 bg-stone-50/0 group-hover:bg-stone-50/50 transition-colors pointer-events-none rounded-[20px]"></div>
-            <div class="flex flex-1 items-start gap-4 relative z-10">
+        <div class="task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col xl:flex-row gap-4 hover:border-stone-400 hover:bg-stone-50/50 cursor-pointer transition-colors" data-action="open-task" data-task-id="${task.id}" style="animation-delay: ${staggerDelay}ms">
+            <div class="flex flex-1 items-start gap-4">
                 <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-1 flex-shrink-0" aria-label="mark task complete">
                     <div class="w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white group-hover:border-stone-400">
                         <svg class="w-3 h-3 text-white check-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -54,7 +54,7 @@ function renderInboxTaskRow(task) {
                     </div>
                 </div>
             </div>
-            <div class="xl:ml-auto flex items-center gap-1.5 opacity-100 xl:opacity-0 group-hover:opacity-100 transition-opacity relative z-20 xl:w-auto w-full pl-[38px] xl:pl-0 pt-2 xl:pt-0 border-t border-stone-100 xl:border-none mt-2 xl:mt-0">
+            <div class="xl:ml-auto flex items-center gap-1.5 opacity-100 xl:opacity-0 group-hover:opacity-100 transition-opacity xl:w-auto w-full pl-[38px] xl:pl-0 pt-2 xl:pt-0 border-t border-stone-100 xl:border-none mt-2 xl:mt-0">
                 <button data-action="schedule-task" data-task-id="${task.id}" data-destination="today" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl border border-stone-200 bg-white text-stone-500 hover:text-stone-900 hover:border-stone-400 hover:shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
                     <svg class="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                     today
@@ -80,23 +80,11 @@ export function renderInboxView({ inboxTasks }) {
     const countLabel = `${count} item${count === 1 ? "" : "s"}`;
     return `
         <div class="h-full flex flex-col min-h-0">
-            <header class="px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-end flex-shrink-0 z-10 bg-white">
+            <header class="px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8 flex-shrink-0 z-10 bg-white">
                 <h1 class="text-3xl sm:text-4xl font-medium tracking-tighter lowercase flex items-center gap-3 sm:gap-4">
                     inbox
-                    <span class="text-lg text-stone-400 font-normal bg-stone-50 border border-stone-100 px-3 py-1 rounded-full flex items-center justify-center shadow-sm">${countLabel}</span>
+                    <span class="text-lg text-stone-400 font-normal">${countLabel}</span>
                 </h1>
-                <div class="flex gap-2 self-start sm:self-auto">
-                    <button class="flex items-center gap-2 px-4 py-2 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 text-sm font-medium transition-colors border border-stone-200/60 lowercase" type="button" aria-label="share inbox">
-                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                        share
-                    </button>
-                    <button class="w-9 h-9 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 flex items-center justify-center transition-colors border border-stone-200/60" type="button" aria-label="sort options">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
-                    </button>
-                    <button class="w-9 h-9 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 flex items-center justify-center transition-colors border border-stone-200/60" type="button" aria-label="more options">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-                    </button>
-                </div>
             </header>
             ${count
         ? `
@@ -112,11 +100,11 @@ export function renderInboxView({ inboxTasks }) {
                 ${count
         ? `
                     <div class="flex flex-col gap-3">
-                        ${inboxTasks.map((task) => renderInboxTaskRow(task)).join("")}
+                        ${inboxTasks.map((task, i) => renderInboxTaskRow(task, i)).join("")}
                     </div>
                 `
         : `
-                    <div class="flex flex-1 flex-col items-center justify-center text-center p-10 bg-white rounded-[32px]">
+                    <div class="flex flex-1 flex-col items-center justify-center text-center p-10">
                         <div class="w-24 h-24 mb-6 text-stone-200 bg-stone-50 rounded-full flex items-center justify-center border border-stone-100 empty-icon shadow-soft">
                             <svg class="w-10 h-10 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                         </div>

@@ -7,10 +7,10 @@ function renderUpcomingSection(sectionKey, title, tasks) {
 
     let lastDate = null;
     const cards = tasks
-        .map((task) => {
+        .map((task, i) => {
             const anchorDate = task.dueAt !== lastDate ? task.dueAt : null;
             lastDate = task.dueAt;
-            return renderTaskCard(task, { anchorDate });
+            return renderTaskCard(task, { anchorDate, index: i });
         })
         .join("");
 
@@ -31,18 +31,7 @@ export function renderUpcomingView({ weekDays, groups }) {
     return `
         <div class="h-full flex flex-col min-h-0">
             <header class="px-4 py-4 pb-3 sm:px-6 sm:py-6 lg:px-10 lg:py-8 lg:pb-4 flex flex-col gap-4 sm:gap-6 flex-shrink-0 z-10 bg-white">
-                <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-end">
-                    <h1 class="text-3xl sm:text-4xl font-medium tracking-tighter lowercase">upcoming</h1>
-                    <div class="flex gap-2 self-start sm:self-auto">
-                        <button class="flex items-center gap-2 px-4 py-2 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 text-sm font-medium transition-colors border border-stone-200/60 lowercase" type="button" aria-label="filter tasks">
-                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                            filter
-                        </button>
-                        <button class="w-9 h-9 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 flex items-center justify-center transition-colors border border-stone-200/60" type="button" aria-label="more options">
-                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-                        </button>
-                    </div>
-                </div>
+                <h1 class="text-3xl sm:text-4xl font-medium tracking-tighter lowercase">upcoming</h1>
                 <div class="flex items-center justify-between gap-1 sm:gap-2 px-0 sm:px-2 py-1">
                     <button data-action="shift-week" data-direction="-1" aria-label="previous week" class="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors" type="button">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>

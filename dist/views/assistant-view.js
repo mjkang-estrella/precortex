@@ -64,24 +64,3 @@ export function renderAssistantPanel({ config, messages, assistantIcons, dom, })
         aiMessages: dom.aiMessages,
     });
 }
-export function renderAssistantVisibility({ assistantOpen, assistantPanel, reopenAssistantButton }) {
-    assistantPanel.classList.toggle("w-[340px]", assistantOpen);
-    assistantPanel.classList.toggle("opacity-100", assistantOpen);
-    assistantPanel.classList.toggle("translate-x-0", assistantOpen);
-    assistantPanel.classList.toggle("scale-100", assistantOpen);
-    assistantPanel.classList.toggle("border-white/60", assistantOpen);
-    assistantPanel.classList.toggle("w-0", !assistantOpen);
-    assistantPanel.classList.toggle("opacity-0", !assistantOpen);
-    assistantPanel.classList.toggle("translate-x-6", !assistantOpen);
-    assistantPanel.classList.toggle("scale-[0.98]", !assistantOpen);
-    assistantPanel.classList.toggle("pointer-events-none", !assistantOpen);
-    assistantPanel.classList.toggle("border-transparent", !assistantOpen);
-    reopenAssistantButton.classList.toggle("opacity-0", assistantOpen);
-    reopenAssistantButton.classList.toggle("translate-y-4", assistantOpen);
-    reopenAssistantButton.classList.toggle("scale-90", assistantOpen);
-    reopenAssistantButton.classList.toggle("pointer-events-none", assistantOpen);
-    reopenAssistantButton.classList.toggle("opacity-100", !assistantOpen);
-    reopenAssistantButton.classList.toggle("translate-y-0", !assistantOpen);
-    reopenAssistantButton.classList.toggle("scale-100", !assistantOpen);
-    reopenAssistantButton.classList.toggle("pointer-events-auto", !assistantOpen);
-}

@@ -97,10 +97,51 @@
     overflow: hidden;
 }
 
+/* Task card staggered entrance */
+@keyframes cardEntrance {
+    0% {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.task-row {
+    animation: cardEntrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Task removal (inbox triage) */
 .task-removing {
     opacity: 0;
-    transform: scale(0.98) translateY(-10px);
+    transform: translateX(40px) scale(0.97);
     pointer-events: none;
+    transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Task completion pulse */
+.task-completing {
+    transition: opacity 0.4s ease-out;
+    opacity: 0.6;
+}
+
+/* View content crossfade */
+@keyframes viewEnter {
+    0% {
+        opacity: 0;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+#mainView > * {
+    animation: viewEnter 0.2s ease-out both;
 }
 
 @keyframes float-celebration {

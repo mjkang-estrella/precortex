@@ -46,7 +46,7 @@
     <aside id="mobileNav" class="inset-y-0 left-0 z-40 w-[280px] max-w-[85vw] flex-shrink-0 flex flex-col gap-4 bg-stone-100 p-3 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:static lg:translate-x-0 lg:w-[260px] lg:max-w-none lg:h-full lg:bg-transparent lg:p-0 lg:gap-6" vid="9">
         
         
-        <button type="button" class="bg-white rounded-3xl p-4 shadow-soft flex items-center gap-3 cursor-pointer hover:shadow-float transition-shadow border border-white/60 w-full text-left" aria-label="switch workspace" vid="10">
+        <button type="button" class="bg-white rounded-3xl p-4 shadow-soft flex items-center gap-3 cursor-pointer hover:shadow-float transition-shadow w-full text-left" aria-label="switch workspace" vid="10">
             <div class="w-10 h-10 rounded-full bg-stone-900 text-white flex items-center justify-center font-medium shadow-sm" vid="11">
                 K
             </div>
@@ -58,7 +58,7 @@
         </button>
 
         
-        <div class="bg-white rounded-3xl shadow-soft flex-1 overflow-y-auto border border-white/60 py-4 flex flex-col" vid="17">
+        <div class="bg-white rounded-3xl shadow-soft flex-1 overflow-y-auto py-4 flex flex-col" vid="17">
             
             <nav class="px-3 flex flex-col gap-1" vid="18">
                 <button type="button" data-action="switch-view" data-view="inbox" class="flex items-center justify-between px-4 py-3 rounded-2xl text-sm transition-all lowercase w-full" vid="19">
@@ -92,12 +92,12 @@
     </aside>
 
     
-    <main aria-label="task content" class="h-full w-full lg:flex-1 bg-white rounded-none lg:rounded-[32px] shadow-soft flex flex-col overflow-hidden relative border-y border-white/60 lg:border min-w-0" vid="45">
+    <main aria-label="task content" class="h-full w-full lg:flex-1 bg-white rounded-none lg:rounded-[32px] shadow-soft flex flex-col overflow-hidden relative min-w-0" vid="45">
         <div id="mainView" class="flex-1 min-h-0"></div>
     </main>
 
     
-    <aside id="assistantPanel" class="inset-y-0 right-0 z-40 w-[340px] max-w-[92vw] flex-shrink-0 bg-white shadow-soft flex flex-col overflow-hidden border-l border-white/60 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-right lg:static lg:relative lg:h-full lg:max-w-none lg:rounded-[32px] lg:border lg:border-white/60 lg:translate-x-0" vid="188">
+    <aside id="assistantPanel" class="inset-y-0 right-0 z-40 w-[340px] max-w-[92vw] flex-shrink-0 bg-white shadow-soft flex flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-right lg:static lg:relative lg:h-full lg:max-w-none lg:rounded-[32px] lg:translate-x-0" vid="188">
         
         
         <div class="px-6 py-5 flex items-center justify-between border-b border-stone-100 bg-white z-10" vid="189">
@@ -130,11 +130,11 @@
                     <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vid="230"><line x1="22" y1="2" x2="11" y2="13" vid="231"></line><polygon points="22 2 15 22 11 13 2 9 22 2" vid="232"></polygon></svg>
                 </button>
             </div>
-            <div id="assistantInputHint" class="text-center mt-3 text-[11px] text-stone-400 lowercase" vid="233">enter to send · shift+enter for new line</div>
+            <div id="assistantInputHint" class="hidden" vid="233"></div>
         </div>
     </aside>
 
-    <button id="openNavButton" data-action="open-nav" aria-label="open navigation" class="fixed bottom-6 left-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-white text-stone-900 shadow-float border border-white/60 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:hidden">
+    <button id="openNavButton" data-action="open-nav" aria-label="open navigation" class="fixed bottom-6 left-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-white text-stone-900 shadow-float transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:hidden">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="4" y1="7" x2="20" y2="7"></line>
             <line x1="4" y1="12" x2="20" y2="12"></line>

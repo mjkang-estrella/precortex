@@ -125,7 +125,6 @@ export function renderProjectSetupModal({ projectSetupModal, projectSetup }) {
                                     <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                                 </button>
                             </div>
-                            <div class="text-center mt-3 text-[11px] text-stone-400 lowercase">enter to send · shift+enter for new line</div>
                         </div>
                     `
             }
