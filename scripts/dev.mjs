@@ -1,8 +1,12 @@
 import { createReadStream, existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
+import * as esbuild from "esbuild";
 import http from "node:http";
-import { spawn } from "node:child_process";
 import path from "node:path";
+import { writePublicConfig } from "./generate-config.mjs";
+import { loadLocalEnv } from "./load-env.mjs";
+
+loadLocalEnv();
 
 const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 4173);
@@ -14,19 +18,22 @@ const mimeTypes = new Map([
     [".js", "text/javascript; charset=utf-8"],
     [".json", "application/json; charset=utf-8"],
     [".mjs", "text/javascript; charset=utf-8"],
+    [".map", "application/json; charset=utf-8"],
     [".svg", "image/svg+xml"],
 ]);
 
-const compiler = spawn("npx", ["tsc", "--project", "tsconfig.json", "--watch", "--preserveWatchOutput"], {
-    cwd: rootDir,
-    stdio: "inherit",
-});
+writePublicConfig("dist/config.js");
 
-compiler.on("exit", (code) => {
-    if (closing) return;
-    console.error(`TypeScript watcher exited with code ${code ?? 0}`);
-    process.exit(code ?? 1);
+const compiler = await esbuild.context({
+    entryPoints: ["src/main.ts"],
+    bundle: true,
+    format: "esm",
+    outfile: "dist/main.js",
+    platform: "browser",
+    sourcemap: true,
+    target: ["es2022"],
 });
+await compiler.watch();
 
 const server = http.createServer(async (request, response) => {
     const requestPath = new URL(request.url || "/", `http://${host}:${port}`).pathname;
@@ -64,7 +71,7 @@ function shutdown(exitCode = 0) {
     if (closing) return;
     closing = true;
     server.close(() => {
-        compiler.kill("SIGINT");
+        compiler.dispose();
         process.exit(exitCode);
     });
 }

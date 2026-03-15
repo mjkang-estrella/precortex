@@ -1,3 +1,5 @@
+import { escapeHtml } from "../utils/text.js";
+
 export function renderNavigation({
     currentView,
     inboxCount,
@@ -5,7 +7,35 @@ export function renderNavigation({
     projectNav,
     projects,
     selectedProjectId,
+    workspaceCard,
+    authUser,
 }) {
+    const displayName = authUser?.name || authUser?.email || "logged in";
+    const safeDisplayName = escapeHtml(displayName);
+    const safeEmail = escapeHtml(authUser?.email || "authenticated");
+    const avatarMarkup = authUser?.picture
+        ? `<img src="${escapeHtml(authUser.picture)}" alt="" class="w-10 h-10 rounded-full object-cover shadow-sm">`
+        : `<div class="w-10 h-10 rounded-full bg-stone-900 text-white flex items-center justify-center font-medium shadow-sm">${displayName
+              .slice(0, 1)
+              .toUpperCase()}</div>`;
+
+    workspaceCard.innerHTML = `
+        <div class="bg-white rounded-3xl p-4 shadow-soft flex items-center gap-3 w-full">
+            ${avatarMarkup}
+            <div class="min-w-0 flex-1">
+                <div class="text-sm font-medium truncate lowercase">${safeDisplayName}</div>
+                <div class="text-xs text-stone-500 truncate">${safeEmail}</div>
+            </div>
+            <button
+                data-action="logout"
+                class="rounded-full border border-stone-200 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500 transition-colors hover:border-stone-400 hover:text-stone-900"
+                type="button"
+            >
+                Log out
+            </button>
+        </div>
+    `;
+
     document.querySelectorAll('[data-action="switch-view"]').forEach((link) => {
         const navigationLink = link as HTMLElement & { dataset: DOMStringMap };
         const isActive = navigationLink.dataset.view === currentView;

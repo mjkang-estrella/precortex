@@ -1,4 +1,8 @@
+import { ConvexHttpClient } from "convex/browser";
+import { createAuthClient, formatAuthError } from "./auth/client.js";
+import { api } from "../convex/_generated/api.js";
 import { assistantIcons } from "./data/assistant.js";
+import { getAppConfig } from "./config.js";
 import * as actions from "./state/actions.js";
 import { buildAssistantReply } from "./state/assistant-replies.js";
 import {
@@ -19,6 +23,7 @@ import {
 import { createStore } from "./state/store.js";
 import { parseLocalISODate } from "./utils/date.js";
 import { renderAssistantPanel } from "./views/assistant-view.js";
+import { renderAuthError, renderAuthLoading, renderAuthScreen } from "./views/auth-view.js";
 import { renderInboxView } from "./views/inbox-view.js";
 import { renderTaskModal } from "./views/modal-view.js";
 import { renderNavigation } from "./views/navigation-view.js";
@@ -27,7 +32,14 @@ import { renderProjectView } from "./views/project-view.js";
 import { renderTodayView } from "./views/today-view.js";
 import { renderUpcomingView } from "./views/upcoming-view.js";
 
-const { state, initialTasks, assistantConfigs } = createStore();
+const AUTH_HINT_STORAGE_KEY = "precortex.authHint";
+const store = createStore();
+const state = store.state;
+let initialTasks = store.initialTasks;
+let assistantConfigs = store.assistantConfigs;
+let authClient = null;
+let convexClient = null;
+let hasStoredAuthHint = false;
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const mobileViewport = window.matchMedia("(max-width: 1023px)");
 let suppressNextTaskListAnimation = false;
@@ -38,6 +50,8 @@ const dragState = {
 };
 
 const dom = {
+    authRoot: byId<HTMLElement>("authRoot"),
+    appShell: byId<HTMLElement>("appShell"),
     mainView: byId<HTMLElement>("mainView"),
     aiMessages: byId<HTMLElement>("aiMessages"),
     assistantQuickActions: byId<HTMLElement>("assistantQuickActions"),
@@ -47,6 +61,7 @@ const dom = {
     assistantPanel: byId<HTMLElement>("assistantPanel"),
     navInboxCount: byId<HTMLElement>("navInboxCount"),
     projectNav: byId<HTMLElement>("projectNav"),
+    workspaceCard: byId<HTMLElement>("workspaceCard"),
     mobileNav: byId<HTMLElement>("mobileNav"),
     mobileDrawerBackdrop: byId<HTMLElement>("mobileDrawerBackdrop"),
     openNavButton: byId<HTMLButtonElement>("openNavButton"),
@@ -65,6 +80,48 @@ const destinationLabels = {
 };
 
 let activeToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function readStoredAuthHint() {
+    try {
+        const raw = window.localStorage.getItem(AUTH_HINT_STORAGE_KEY);
+        if (!raw) return null;
+
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") return null;
+
+        return {
+            name: typeof parsed.name === "string" ? parsed.name : undefined,
+            email: typeof parsed.email === "string" ? parsed.email : undefined,
+            picture: typeof parsed.picture === "string" ? parsed.picture : undefined,
+        };
+    } catch {
+        return null;
+    }
+}
+
+function persistAuthHint(user) {
+    try {
+        window.localStorage.setItem(AUTH_HINT_STORAGE_KEY, JSON.stringify(user || {}));
+    } catch {
+        // Ignore localStorage failures and fall back to normal auth boot behavior.
+    }
+    hasStoredAuthHint = true;
+}
+
+function clearAuthHint() {
+    try {
+        window.localStorage.removeItem(AUTH_HINT_STORAGE_KEY);
+    } catch {
+        // Ignore localStorage failures.
+    }
+    hasStoredAuthHint = false;
+}
+
+const storedAuthHint = readStoredAuthHint();
+if (storedAuthHint) {
+    state.auth.user = storedAuthHint;
+    hasStoredAuthHint = true;
+}
 
 function showToast(message: string, undoCallback?: () => void) {
     if (activeToastTimer) clearTimeout(activeToastTimer);
@@ -255,6 +312,31 @@ function renderChrome() {
 }
 
 function render() {
+    const shouldKeepShellVisible = state.auth.status === "authenticated" || (state.auth.status === "loading" && hasStoredAuthHint);
+
+    if (!shouldKeepShellVisible) {
+        dom.appShell.classList.add("hidden");
+        dom.appShell.classList.remove("flex");
+        dom.authRoot.classList.remove("hidden");
+
+        if (state.auth.status === "loading") {
+            dom.authRoot.innerHTML = renderAuthLoading();
+            return;
+        }
+
+        if (state.auth.status === "error") {
+            dom.authRoot.innerHTML = renderAuthError(state.auth.errorMessage || "Authentication failed.");
+            return;
+        }
+
+        dom.authRoot.innerHTML = renderAuthScreen();
+        return;
+    }
+
+    dom.authRoot.classList.add("hidden");
+    dom.appShell.classList.remove("hidden");
+    dom.appShell.classList.add("flex");
+
     const suppressAnimation = suppressNextTaskListAnimation;
     suppressNextTaskListAnimation = false;
 
@@ -265,6 +347,8 @@ function render() {
         projectNav: dom.projectNav,
         projects: getProjects(state),
         selectedProjectId: state.selectedProjectId,
+        workspaceCard: dom.workspaceCard,
+        authUser: state.auth.user,
     });
     renderMainView(suppressAnimation);
     updateAssistant();
@@ -279,6 +363,113 @@ function render() {
         const target = state.pendingUpcomingScrollTarget;
         state.pendingUpcomingScrollTarget = null;
         requestAnimationFrame(() => scrollUpcomingTargetIntoView(target));
+    }
+}
+
+function closeConvexClient() {
+    if (!convexClient) return;
+    convexClient.clearAuth();
+    convexClient = null;
+}
+
+function resetAppState() {
+    const freshStore = createStore();
+
+    Object.assign(state, freshStore.state);
+    initialTasks = freshStore.initialTasks;
+    assistantConfigs = freshStore.assistantConfigs;
+
+    if (isMobileViewport()) {
+        state.assistantOpen = false;
+    }
+}
+
+async function bootstrapAuth() {
+    state.auth.status = "loading";
+    state.auth.errorMessage = null;
+    render();
+
+    try {
+        const config = getAppConfig();
+        authClient = await createAuthClient(config);
+
+        const session = await authClient.initialize();
+        if (!session.isAuthenticated) {
+            closeConvexClient();
+            clearAuthHint();
+            state.auth.status = "unauthenticated";
+            state.auth.user = null;
+            render();
+            return;
+        }
+
+        closeConvexClient();
+        convexClient = new ConvexHttpClient(config.convexUrl);
+        const token = await authClient.getToken({ forceRefreshToken: false });
+        if (!token) {
+            clearAuthHint();
+            state.auth.status = "unauthenticated";
+            state.auth.user = null;
+            render();
+            return;
+        }
+        convexClient.setAuth(token);
+
+        const viewer = await convexClient.query(api.auth.viewer, {});
+
+        state.auth.status = "authenticated";
+        state.auth.user = viewer
+            ? {
+                  name: viewer.name,
+                  email: viewer.email,
+                  picture: viewer.picture,
+              }
+            : session.user;
+        persistAuthHint(state.auth.user);
+        state.auth.errorMessage = null;
+        render();
+    } catch (error) {
+        closeConvexClient();
+        state.auth.status = "error";
+        state.auth.errorMessage = formatAuthError(error);
+        render();
+    }
+}
+
+async function startLogin() {
+    try {
+        if (!authClient) {
+            await bootstrapAuth();
+            if (state.auth.status !== "unauthenticated") return;
+        }
+
+        await authClient.login();
+    } catch (error) {
+        state.auth.status = "error";
+        state.auth.errorMessage = formatAuthError(error);
+        render();
+    }
+}
+
+async function startLogout() {
+    try {
+        clearAuthHint();
+        resetAppState();
+        state.auth.status = "loading";
+        render();
+        closeConvexClient();
+
+        if (!authClient) {
+            state.auth.status = "unauthenticated";
+            render();
+            return;
+        }
+
+        await authClient.logout();
+    } catch (error) {
+        state.auth.status = "error";
+        state.auth.errorMessage = formatAuthError(error);
+        render();
     }
 }
 
@@ -396,6 +587,8 @@ function trapFocus(container: HTMLElement, event: KeyboardEvent) {
 }
 
 document.addEventListener("keydown", (event) => {
+    if (state.auth.status !== "authenticated") return;
+
     const target = event.target as HTMLInputElement | HTMLTextAreaElement | null;
 
     if (event.key === "Tab") {
@@ -484,6 +677,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("input", (event) => {
+    if (state.auth.status !== "authenticated") return;
+
     const target = event.target as HTMLInputElement | HTMLTextAreaElement | null;
     if (!target) return;
 
@@ -550,6 +745,8 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+    if (state.auth.status !== "authenticated") return;
+
     const target = event.target as HTMLInputElement | HTMLSelectElement | null;
     if (!target) return;
 
@@ -577,6 +774,18 @@ document.addEventListener("click", (event) => {
     if (!actionElement) return;
 
     const { action, taskId, suggestion, view, direction, date, destination } = actionElement.dataset;
+
+    if (action === "login") {
+        void startLogin();
+        return;
+    }
+
+    if (action === "logout") {
+        void startLogout();
+        return;
+    }
+
+    if (state.auth.status !== "authenticated") return;
 
     if (action === "switch-view") {
         if (actions.setView(state, view)) {
@@ -785,6 +994,8 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("dragstart", (event) => {
+    if (state.auth.status !== "authenticated") return;
+
     const target = event.target as HTMLElement | null;
     const row = target?.closest(".task-row[draggable='true']") as HTMLElement | null;
     if (!row) return;
@@ -801,6 +1012,8 @@ document.addEventListener("dragstart", (event) => {
 });
 
 document.addEventListener("dragover", (event) => {
+    if (state.auth.status !== "authenticated") return;
+
     const target = event.target as HTMLElement | null;
     const row = target?.closest(".task-row[draggable='true']") as HTMLElement | null;
     if (!row) return;
@@ -816,6 +1029,8 @@ document.addEventListener("dragover", (event) => {
 });
 
 document.addEventListener("drop", (event) => {
+    if (state.auth.status !== "authenticated") return;
+
     const target = event.target as HTMLElement | null;
     const row = target?.closest(".task-row[draggable='true']") as HTMLElement | null;
     if (!row || !dragState.taskId) return;
@@ -835,6 +1050,8 @@ document.addEventListener("drop", (event) => {
 });
 
 document.addEventListener("dragend", () => {
+    if (state.auth.status !== "authenticated") return;
+
     clearTaskDropIndicators();
     dragState.taskId = null;
     dragState.listId = null;
@@ -852,3 +1069,4 @@ mobileViewport.addEventListener("change", (event) => {
 });
 
 render();
+void bootstrapAuth();

@@ -36,6 +36,11 @@ export function createStore() {
             nextSubtaskId: initialSubtaskCount + 1,
             nextProjectId: initialProjects.length + 1,
             pendingUpcomingScrollTarget: null,
+            auth: {
+                status: "loading",
+                user: null,
+                errorMessage: null,
+            },
         },
     };
 }
