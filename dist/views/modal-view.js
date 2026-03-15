@@ -12,12 +12,12 @@ export function renderTaskModal({ taskModal, task, animate = false }) {
     const dueLabel = task.dueAt ? dueMeta.longLabel : "unscheduled";
     const backdropAnimationClass = animate ? "animate-backdrop" : "";
     const modalAnimationClass = animate ? "animate-modal" : "";
-    taskModal.className = "fixed inset-0 z-50 flex items-center justify-center p-6";
+    taskModal.className = "fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6";
     taskModal.innerHTML = `
         <div class="absolute inset-0 bg-stone-900/40 backdrop-blur-[2px] ${backdropAnimationClass}" data-action="close-modal"></div>
-        <div class="bg-white w-full max-w-[800px] max-h-[90vh] rounded-[32px] shadow-modal relative z-10 flex flex-col overflow-hidden border border-white ${modalAnimationClass}">
-            <div class="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-white flex-shrink-0">
-                <div class="flex items-center gap-3">
+        <div role="dialog" aria-modal="true" aria-label="task details" class="bg-white w-full max-w-[800px] max-h-[90vh] rounded-[28px] sm:rounded-[32px] shadow-modal relative z-10 flex flex-col overflow-hidden border border-white ${modalAnimationClass}">
+            <div class="px-4 py-4 sm:px-6 border-b border-stone-100 flex flex-wrap items-center justify-between gap-3 bg-white flex-shrink-0">
+                <div class="flex items-center gap-3 min-w-0">
                     <button data-action="modal-toggle-task" data-task-id="${task.id}" class="px-3 py-1.5 rounded-xl text-[13px] font-medium ${task.status === "completed"
         ? "text-stone-500 border border-stone-200"
         : "bg-stone-900 text-white border border-stone-900"} transition-all lowercase flex items-center gap-2">
@@ -28,16 +28,16 @@ export function renderTaskModal({ taskModal, task, animate = false }) {
                     <span class="text-[13px] text-stone-400 lowercase">${escapeHtml(task.projectName || "inbox")}</span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button class="w-8 h-8 flex items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-900 transition-colors" type="button">
+                    <button class="w-8 h-8 flex items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-900 transition-colors" type="button" aria-label="more options">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
                     </button>
-                    <button data-action="close-modal" class="w-8 h-8 flex items-center justify-center rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-900 transition-colors" type="button">
+                    <button data-action="close-modal" aria-label="close task details" class="w-8 h-8 flex items-center justify-center rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-900 transition-colors" type="button">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
             </div>
-            <div class="flex-1 overflow-hidden flex bg-white">
-                <div class="flex-1 overflow-y-auto p-8 pr-6 flex flex-col gap-8">
+            <div class="flex-1 overflow-hidden flex flex-col lg:flex-row bg-white">
+                <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 lg:pr-6 flex flex-col gap-6 sm:gap-8 min-w-0">
                     <div class="flex gap-4 items-start">
                         <button data-action="modal-toggle-task" data-task-id="${task.id}" class="${task.status === "completed"
         ? "w-[22px] h-[22px] rounded-full border-2 border-stone-900 bg-stone-900 mt-2 flex items-center justify-center flex-shrink-0"
@@ -46,10 +46,10 @@ export function renderTaskModal({ taskModal, task, animate = false }) {
         ? '<svg class="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
         : ""}
                         </button>
-                        <textarea id="modalTitleInput" data-task-id="${task.id}" class="text-3xl font-medium text-stone-900 w-full outline-none resize-none lowercase bg-transparent placeholder-stone-300 tracking-tight" rows="2" placeholder="task name">${escapeHtml(task.title)}</textarea>
+                        <textarea id="modalTitleInput" data-task-id="${task.id}" aria-label="task title" class="text-3xl font-medium text-stone-900 w-full outline-none resize-none lowercase bg-transparent placeholder-stone-300 tracking-tight" rows="2" placeholder="task name">${escapeHtml(task.title)}</textarea>
                     </div>
                     <div class="pl-[38px] flex flex-col gap-2">
-                        <textarea id="modalDescriptionInput" data-task-id="${task.id}" class="w-full bg-transparent text-[15px] leading-relaxed text-stone-600 outline-none resize-none min-h-[100px] lowercase placeholder-stone-400" placeholder="add a description...">${escapeHtml(task.description || "")}</textarea>
+                        <textarea id="modalDescriptionInput" data-task-id="${task.id}" aria-label="task description" class="w-full bg-transparent text-[15px] leading-relaxed text-stone-600 outline-none resize-none min-h-[100px] lowercase placeholder-stone-400" placeholder="add a description...">${escapeHtml(task.description || "")}</textarea>
                     </div>
                     <div class="pl-[38px] flex flex-col gap-3">
                         <div class="flex items-center justify-between mb-1">
@@ -77,7 +77,7 @@ export function renderTaskModal({ taskModal, task, animate = false }) {
                     </div>
                     <div class="h-8"></div>
                 </div>
-                <div class="w-[240px] border-l border-stone-100 bg-stone-50/30 p-6 flex flex-col gap-6 flex-shrink-0">
+                <div class="w-full lg:w-[240px] border-t lg:border-t-0 lg:border-l border-stone-100 bg-stone-50/30 p-4 sm:p-6 flex flex-col gap-6 flex-shrink-0">
                     <div class="flex flex-col gap-5">
                         <div class="flex flex-col gap-2">
                             <span class="text-[11px] font-semibold text-stone-400 lowercase tracking-wider">project</span>

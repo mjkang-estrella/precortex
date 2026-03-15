@@ -14,7 +14,7 @@ function renderMessages({ messages, senderLabel, aiMessages }) {
         }
         const body = message.rich
             ? `
-                    <div class="lowercase mb-3">${message.text}</div>
+                    <div class="lowercase mb-3">${escapeHtml(message.text)}</div>
                     <div class="flex flex-col gap-2 mt-3">
                         ${message.tasks
                 .map((task) => `

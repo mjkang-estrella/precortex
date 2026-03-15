@@ -93,20 +93,20 @@ export function renderInboxView({ inboxTasks }) {
 
     return `
         <div class="h-full flex flex-col min-h-0">
-            <header class="px-10 py-8 flex justify-between items-end flex-shrink-0 z-10 bg-white">
-                <h1 class="text-4xl font-medium tracking-tighter lowercase flex items-center gap-4">
+            <header class="px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-end flex-shrink-0 z-10 bg-white">
+                <h1 class="text-3xl sm:text-4xl font-medium tracking-tighter lowercase flex items-center gap-3 sm:gap-4">
                     inbox
                     <span class="text-lg text-stone-400 font-normal bg-stone-50 border border-stone-100 px-3 py-1 rounded-full flex items-center justify-center shadow-sm">${countLabel}</span>
                 </h1>
-                <div class="flex gap-2">
-                    <button class="flex items-center gap-2 px-4 py-2 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 text-sm font-medium transition-colors border border-stone-200/60 lowercase" type="button">
+                <div class="flex gap-2 self-start sm:self-auto">
+                    <button class="flex items-center gap-2 px-4 py-2 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 text-sm font-medium transition-colors border border-stone-200/60 lowercase" type="button" aria-label="share inbox">
                         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                         share
                     </button>
-                    <button class="w-9 h-9 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 flex items-center justify-center transition-colors border border-stone-200/60" type="button">
+                    <button class="w-9 h-9 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 flex items-center justify-center transition-colors border border-stone-200/60" type="button" aria-label="sort options">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
                     </button>
-                    <button class="w-9 h-9 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 flex items-center justify-center transition-colors border border-stone-200/60" type="button">
+                    <button class="w-9 h-9 rounded-full bg-stone-50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 flex items-center justify-center transition-colors border border-stone-200/60" type="button" aria-label="more options">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
                     </button>
                 </div>
@@ -114,16 +114,16 @@ export function renderInboxView({ inboxTasks }) {
             ${
                 count
                     ? `
-                <div class="px-10 pb-6 flex-shrink-0 z-10 bg-white">
+                <div class="px-4 pb-4 sm:px-6 sm:pb-5 lg:px-10 lg:pb-6 flex-shrink-0 z-10 bg-white">
                     <div class="group flex items-center gap-3 bg-stone-50 rounded-2xl px-5 py-4 border border-stone-200/60 focus-within:border-stone-400 focus-within:bg-white focus-within:shadow-sm transition-all">
                         <svg class="w-5 h-5 text-stone-400 group-focus-within:text-stone-900 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        <input id="taskInput" type="text" class="flex-1 bg-transparent border-none outline-none text-[15px] placeholder-stone-400 text-stone-900 lowercase" placeholder="add to inbox to sort later...">
+                        <input id="taskInput" type="text" aria-label="add task to inbox" class="flex-1 bg-transparent border-none outline-none text-[15px] placeholder-stone-400 text-stone-900 lowercase" placeholder="add to inbox to sort later...">
                     </div>
                 </div>
             `
                     : ""
             }
-            <div class="flex-1 overflow-y-auto px-10 pb-10 flex flex-col relative">
+            <div class="flex-1 overflow-y-auto px-4 pb-24 sm:px-6 sm:pb-10 lg:px-10 flex flex-col relative">
                 ${
                     count
                         ? `

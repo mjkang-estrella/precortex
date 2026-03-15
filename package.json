@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "tsc --project tsconfig.json --noEmit"
+    "check": "tsc --project tsconfig.json --noEmit",
+    "dev": "node scripts/dev.mjs"
   },
   "devDependencies": {
     "typescript": "^5.8.2"

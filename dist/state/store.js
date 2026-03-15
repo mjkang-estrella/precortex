@@ -22,6 +22,7 @@ export function createStore() {
             selectedUpcomingDate: toLocalISODate(addDays(TODAY, 1)),
             messagesByView: createInitialMessages(assistantConfigs),
             assistantOpen: true,
+            mobileNavOpen: false,
             modalTaskId: null,
             projectSetup: createProjectSetupState(),
             nextTaskId: initialTasks.length + 1,

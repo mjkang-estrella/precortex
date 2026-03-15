@@ -1,3 +1,8 @@
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #e3e3df transparent;
+}
+
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -118,4 +123,32 @@
 
 textarea {
     field-sizing: content;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+@media (max-width: 1023px) {
+    #mobileNav,
+    #assistantPanel {
+        position: fixed !important;
+        top: 0;
+        bottom: 0;
+    }
+
+    #mobileNav {
+        left: 0;
+    }
+
+    #assistantPanel {
+        right: 0;
+    }
 }

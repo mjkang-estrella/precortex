@@ -82,12 +82,12 @@ export function renderProjectSetupModal({ projectSetupModal, projectSetup }) {
         projectSetupModal.innerHTML = "";
         return;
     }
-    projectSetupModal.className = "fixed inset-0 z-50 flex items-center justify-center p-6";
+    projectSetupModal.className = "fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6";
     projectSetupModal.innerHTML = `
         <div class="absolute inset-0 bg-stone-900/45 backdrop-blur-[2px] animate-backdrop" data-action="close-project-setup"></div>
-        <div class="relative z-10 w-full max-w-[920px] max-h-[90vh] overflow-hidden rounded-[32px] border border-white bg-white shadow-modal animate-modal flex flex-col">
-            <div class="px-6 py-5 border-b border-stone-100 flex items-center justify-between bg-white">
-                <div class="flex items-center gap-3">
+        <div role="dialog" aria-modal="true" aria-label="project setup" class="relative z-10 w-full max-w-[920px] max-h-[90vh] overflow-hidden rounded-[28px] sm:rounded-[32px] border border-white bg-white shadow-modal animate-modal flex flex-col">
+            <div class="px-4 py-4 sm:px-6 sm:py-5 border-b border-stone-100 flex flex-wrap items-center justify-between gap-3 bg-white">
+                <div class="flex items-center gap-3 min-w-0">
                     <div class="w-9 h-9 rounded-full bg-stone-900 text-white flex items-center justify-center shadow-sm">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"></path><path d="M12 8v4l3 3"></path><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none"></circle></svg>
                     </div>
@@ -98,7 +98,7 @@ export function renderProjectSetupModal({ projectSetupModal, projectSetup }) {
                 </div>
                 <div class="flex items-center gap-2">
                     <button data-action="restart-project-setup" class="px-3 py-2 rounded-xl text-[12px] font-medium border border-stone-200 text-stone-500 hover:text-stone-900 hover:border-stone-400 transition-colors lowercase" type="button">restart</button>
-                    <button data-action="close-project-setup" class="w-8 h-8 flex items-center justify-center rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-900 transition-colors" type="button">
+                    <button data-action="close-project-setup" aria-label="close project setup" class="w-8 h-8 flex items-center justify-center rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-900 transition-colors" type="button">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
@@ -106,15 +106,15 @@ export function renderProjectSetupModal({ projectSetupModal, projectSetup }) {
             ${projectSetup.phase === "review" && projectSetup.draft
         ? renderReview(projectSetup.draft)
         : `
-                        <div class="flex-1 overflow-y-auto p-8 bg-stone-50/20">
+                        <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-stone-50/20">
                             <div class="flex flex-col gap-4">
                                 ${renderSetupMessages(projectSetup.messages)}
                             </div>
                         </div>
                         <div class="border-t border-stone-100 p-4 bg-white">
                             <div class="group border border-stone-200 bg-white rounded-[24px] flex items-end p-1.5 focus-within:border-stone-500 focus-within:shadow-sm transition-all">
-                                <textarea id="projectSetupInput" class="flex-1 bg-transparent border-none outline-none text-[14px] placeholder-stone-400 text-stone-900 py-2.5 pl-4 pr-2 resize-none max-h-[120px] overflow-y-auto lowercase" rows="1" placeholder="answer bay..."></textarea>
-                                <button data-action="send-project-setup" class="w-9 h-9 flex-shrink-0 rounded-full bg-stone-900 text-white flex items-center justify-center hover:scale-105 transition-transform shadow-sm mb-0.5 mr-0.5" type="button">
+                                <textarea id="projectSetupInput" aria-label="reply to bay" class="flex-1 bg-transparent border-none outline-none text-[14px] placeholder-stone-400 text-stone-900 py-2.5 pl-4 pr-2 resize-none max-h-[120px] overflow-y-auto lowercase" rows="1" placeholder="answer bay..."></textarea>
+                                <button data-action="send-project-setup" aria-label="send message" class="w-9 h-9 flex-shrink-0 rounded-full bg-stone-900 text-white flex items-center justify-center hover:scale-105 transition-transform shadow-sm mb-0.5 mr-0.5" type="button">
                                     <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                                 </button>
                             </div>
@@ -123,11 +123,11 @@ export function renderProjectSetupModal({ projectSetupModal, projectSetup }) {
                     `}
             ${projectSetup.phase === "review" && projectSetup.draft
         ? `
-                        <div class="border-t border-stone-100 p-4 bg-white flex items-center justify-between gap-3">
+                        <div class="border-t border-stone-100 p-4 bg-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <button data-action="close-project-setup" class="px-4 py-3 rounded-2xl border border-stone-200 text-stone-500 hover:text-stone-900 hover:border-stone-400 transition-colors lowercase" type="button">
                                 cancel
                             </button>
-                            <div class="flex items-center gap-3">
+                            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
                                 <button data-action="restart-project-setup" class="px-4 py-3 rounded-2xl border border-stone-200 text-stone-500 hover:text-stone-900 hover:border-stone-400 transition-colors lowercase" type="button">
                                     restart
                                 </button>

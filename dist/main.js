@@ -4,7 +4,7 @@ import { buildAssistantReply } from "./state/assistant-replies.js";
 import { getCompletedTasks, getCurrentAssistantMessages, getInboxCount, getInboxTasks, getProjectCompletedTasks, getProjectTasks, getProjects, getSelectedProject, getSelectedTask, getTodayTasks, getUpcomingGroups, getUpcomingSectionKey, getWeekDays, } from "./state/selectors.js";
 import { createStore } from "./state/store.js";
 import { parseLocalISODate } from "./utils/date.js";
-import { renderAssistantPanel, renderAssistantVisibility } from "./views/assistant-view.js";
+import { renderAssistantPanel } from "./views/assistant-view.js";
 import { renderInboxView } from "./views/inbox-view.js";
 import { renderTaskModal } from "./views/modal-view.js";
 import { renderNavigation } from "./views/navigation-view.js";
@@ -14,6 +14,7 @@ import { renderTodayView } from "./views/today-view.js";
 import { renderUpcomingView } from "./views/upcoming-view.js";
 const { state, initialTasks, assistantConfigs } = createStore();
 const byId = (id) => document.getElementById(id);
+const mobileViewport = window.matchMedia("(max-width: 1023px)");
 const dom = {
     mainView: byId("mainView"),
     aiMessages: byId("aiMessages"),
@@ -24,11 +25,20 @@ const dom = {
     assistantPanel: byId("assistantPanel"),
     navInboxCount: byId("navInboxCount"),
     projectNav: byId("projectNav"),
+    mobileNav: byId("mobileNav"),
+    mobileDrawerBackdrop: byId("mobileDrawerBackdrop"),
+    openNavButton: byId("openNavButton"),
     reopenAssistantButton: byId("reopenAssistantButton"),
     taskModal: byId("taskModal"),
     projectSetupModal: byId("projectSetupModal"),
     aiInput: byId("aiInput"),
 };
+function isMobileViewport() {
+    return mobileViewport.matches;
+}
+if (isMobileViewport()) {
+    state.assistantOpen = false;
+}
 function renderMainView() {
     if (state.currentView === "project") {
         const project = getSelectedProject(state);
@@ -96,6 +106,57 @@ function scrollUpcomingTargetIntoView(dateIso) {
     }
     scrollArea.scrollTo({ top: 0, behavior: "smooth" });
 }
+function closeMobileChrome() {
+    if (!isMobileViewport())
+        return;
+    state.mobileNavOpen = false;
+    state.assistantOpen = false;
+}
+function renderChrome() {
+    const mobile = isMobileViewport();
+    const drawersOpen = mobile && (state.mobileNavOpen || state.assistantOpen);
+    const blockingSurfaceOpen = Boolean(getSelectedTask(state) || state.projectSetup.open);
+    dom.mobileNav.classList.toggle("translate-x-0", mobile && state.mobileNavOpen);
+    dom.mobileNav.classList.toggle("-translate-x-full", mobile && !state.mobileNavOpen);
+    dom.mobileNav.classList.toggle("pointer-events-none", mobile && !state.mobileNavOpen);
+    dom.mobileNav.classList.toggle("pointer-events-auto", !mobile || state.mobileNavOpen);
+    dom.mobileDrawerBackdrop.classList.toggle("opacity-100", drawersOpen);
+    dom.mobileDrawerBackdrop.classList.toggle("pointer-events-auto", drawersOpen);
+    dom.mobileDrawerBackdrop.classList.toggle("opacity-0", !drawersOpen);
+    dom.mobileDrawerBackdrop.classList.toggle("pointer-events-none", !drawersOpen);
+    dom.assistantPanel.classList.toggle("translate-x-0", mobile && state.assistantOpen);
+    dom.assistantPanel.classList.toggle("translate-x-full", mobile && !state.assistantOpen);
+    dom.assistantPanel.classList.toggle("pointer-events-none", mobile && !state.assistantOpen);
+    dom.assistantPanel.classList.toggle("pointer-events-auto", !mobile || state.assistantOpen);
+    dom.assistantPanel.classList.toggle("lg:w-[340px]", state.assistantOpen);
+    dom.assistantPanel.classList.toggle("lg:opacity-100", state.assistantOpen);
+    dom.assistantPanel.classList.toggle("lg:scale-100", state.assistantOpen);
+    dom.assistantPanel.classList.toggle("lg:border-white/60", state.assistantOpen);
+    dom.assistantPanel.classList.toggle("lg:w-0", !state.assistantOpen);
+    dom.assistantPanel.classList.toggle("lg:opacity-0", !state.assistantOpen);
+    dom.assistantPanel.classList.toggle("lg:translate-x-6", !state.assistantOpen);
+    dom.assistantPanel.classList.toggle("lg:scale-[0.98]", !state.assistantOpen);
+    dom.assistantPanel.classList.toggle("lg:pointer-events-none", !state.assistantOpen);
+    dom.assistantPanel.classList.toggle("lg:border-transparent", !state.assistantOpen);
+    const showNavButton = mobile && !state.mobileNavOpen && !blockingSurfaceOpen;
+    dom.openNavButton.classList.toggle("opacity-100", showNavButton);
+    dom.openNavButton.classList.toggle("translate-y-0", showNavButton);
+    dom.openNavButton.classList.toggle("scale-100", showNavButton);
+    dom.openNavButton.classList.toggle("pointer-events-auto", showNavButton);
+    dom.openNavButton.classList.toggle("opacity-0", !showNavButton);
+    dom.openNavButton.classList.toggle("translate-y-4", !showNavButton);
+    dom.openNavButton.classList.toggle("scale-90", !showNavButton);
+    dom.openNavButton.classList.toggle("pointer-events-none", !showNavButton);
+    const showAssistantButton = !state.assistantOpen && !blockingSurfaceOpen;
+    dom.reopenAssistantButton.classList.toggle("opacity-100", showAssistantButton);
+    dom.reopenAssistantButton.classList.toggle("translate-y-0", showAssistantButton);
+    dom.reopenAssistantButton.classList.toggle("scale-100", showAssistantButton);
+    dom.reopenAssistantButton.classList.toggle("pointer-events-auto", showAssistantButton);
+    dom.reopenAssistantButton.classList.toggle("opacity-0", !showAssistantButton);
+    dom.reopenAssistantButton.classList.toggle("translate-y-4", !showAssistantButton);
+    dom.reopenAssistantButton.classList.toggle("scale-90", !showAssistantButton);
+    dom.reopenAssistantButton.classList.toggle("pointer-events-none", !showAssistantButton);
+}
 function render() {
     renderNavigation({
         currentView: state.currentView,
@@ -107,16 +168,12 @@ function render() {
     });
     renderMainView();
     updateAssistant();
-    renderAssistantVisibility({
-        assistantOpen: state.assistantOpen,
-        assistantPanel: dom.assistantPanel,
-        reopenAssistantButton: dom.reopenAssistantButton,
-    });
     updateTaskModal();
     renderProjectSetupModal({
         projectSetupModal: dom.projectSetupModal,
         projectSetup: state.projectSetup,
     });
+    renderChrome();
     if (state.currentView === "upcoming" && state.pendingUpcomingScrollTarget) {
         const target = state.pendingUpcomingScrollTarget;
         state.pendingUpcomingScrollTarget = null;
@@ -174,8 +231,35 @@ function sendProjectSetupMessage() {
     input.style.height = "auto";
     render();
 }
+function trapFocus(container, event) {
+    const focusable = container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (!focusable.length)
+        return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    }
+    else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
+}
 document.addEventListener("keydown", (event) => {
     const target = event.target;
+    if (event.key === "Tab") {
+        const dialog = dom.taskModal.querySelector('[role="dialog"]');
+        if (dialog) {
+            trapFocus(dialog, event);
+            return;
+        }
+        const setupDialog = dom.projectSetupModal.querySelector('[role="dialog"]');
+        if (setupDialog) {
+            trapFocus(setupDialog, event);
+            return;
+        }
+    }
     if (event.key === "Escape" && getSelectedTask(state)) {
         actions.closeTaskModal(state);
         updateTaskModal();
@@ -249,12 +333,10 @@ document.addEventListener("click", (event) => {
     const actionElement = target?.closest("[data-action]");
     if (!actionElement)
         return;
-    if (actionElement.tagName === "A") {
-        event.preventDefault();
-    }
     const { action, taskId, suggestion, view, direction, date, destination } = actionElement.dataset;
     if (action === "switch-view") {
         if (actions.setView(state, view)) {
+            state.mobileNavOpen = false;
             render();
         }
         return;
@@ -271,6 +353,7 @@ document.addEventListener("click", (event) => {
     }
     if (action === "open-project") {
         actions.openProject(state, actionElement.dataset.projectId);
+        state.mobileNavOpen = false;
         render();
         return;
     }
@@ -291,7 +374,9 @@ document.addEventListener("click", (event) => {
     }
     if (action === "open-task") {
         actions.openTaskModal(state, taskId);
+        closeMobileChrome();
         updateTaskModal(true);
+        renderChrome();
         return;
     }
     if (action === "close-modal") {
@@ -305,6 +390,7 @@ document.addEventListener("click", (event) => {
     }
     if (action === "open-project-setup") {
         actions.openProjectSetup(state);
+        closeMobileChrome();
         render();
         requestAnimationFrame(() => {
             document.getElementById("projectSetupInput")?.focus();
@@ -344,21 +430,36 @@ document.addEventListener("click", (event) => {
     }
     if (action === "close-assistant") {
         state.assistantOpen = false;
-        renderAssistantVisibility({
-            assistantOpen: state.assistantOpen,
-            assistantPanel: dom.assistantPanel,
-            reopenAssistantButton: dom.reopenAssistantButton,
-        });
+        renderChrome();
+        return;
+    }
+    if (action === "open-nav") {
+        state.mobileNavOpen = true;
+        if (isMobileViewport()) {
+            state.assistantOpen = false;
+        }
+        renderChrome();
+        return;
+    }
+    if (action === "close-drawers") {
+        closeMobileChrome();
+        renderChrome();
         return;
     }
     if (action === "reopen-assistant") {
         state.assistantOpen = true;
-        renderAssistantVisibility({
-            assistantOpen: state.assistantOpen,
-            assistantPanel: dom.assistantPanel,
-            reopenAssistantButton: dom.reopenAssistantButton,
-        });
+        if (isMobileViewport()) {
+            state.mobileNavOpen = false;
+        }
+        renderChrome();
         return;
     }
+});
+mobileViewport.addEventListener("change", (event) => {
+    state.mobileNavOpen = false;
+    if (event.matches) {
+        state.assistantOpen = false;
+    }
+    render();
 });
 render();
