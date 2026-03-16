@@ -140,7 +140,7 @@ async function callAnthropic(messages: Array<{ sender: string; text: string }>) 
             "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-            model: process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-latest",
+            model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
             max_tokens: 1400,
             system: buildSystemPrompt(),
             messages: [
