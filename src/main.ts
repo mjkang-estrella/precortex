@@ -36,6 +36,9 @@ import { renderTodayView } from "./views/today-view.js";
 import { renderUpcomingView } from "./views/upcoming-view.js";
 
 const AUTH_HINT_STORAGE_KEY = "precortex.authHint";
+const ASSISTANT_WIDTH_STORAGE_KEY = "precortex.assistantWidth";
+const DESKTOP_ASSISTANT_MIN_WIDTH = 340;
+const DESKTOP_ASSISTANT_MAX_WIDTH_RATIO = 0.45;
 const store = createStore();
 const state = store.state;
 let assistantConfigs = store.assistantConfigs;
@@ -54,16 +57,24 @@ const dragState = {
     listId: null,
     justDragged: false,
 };
+const assistantResizeState = {
+    active: false,
+    pointerId: null as number | null,
+};
+let preferredDesktopAssistantWidth = readStoredAssistantWidth();
 
 const dom = {
     authRoot: byId<HTMLElement>("authRoot"),
     appShell: byId<HTMLElement>("appShell"),
+    contentShell: byId<HTMLElement>("contentShell"),
+    mainPanel: byId<HTMLElement>("mainPanel"),
     mainView: byId<HTMLElement>("mainView"),
     aiMessages: byId<HTMLElement>("aiMessages"),
     assistantQuickActions: byId<HTMLElement>("assistantQuickActions"),
     assistantTitle: byId<HTMLElement>("assistantTitle"),
     assistantQuickActionsLabel: byId<HTMLElement>("assistantQuickActionsLabel"),
     assistantInputHint: byId<HTMLElement>("assistantInputHint"),
+    assistantResizeHandle: byId<HTMLElement>("assistantResizeHandle"),
     assistantPanel: byId<HTMLElement>("assistantPanel"),
     navInboxCount: byId<HTMLElement>("navInboxCount"),
     projectNav: byId<HTMLElement>("projectNav"),
@@ -85,6 +96,40 @@ const destinationLabels = {
 };
 
 let activeToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function readStoredAssistantWidth() {
+    try {
+        const raw = window.localStorage.getItem(ASSISTANT_WIDTH_STORAGE_KEY);
+        if (!raw) return DESKTOP_ASSISTANT_MIN_WIDTH;
+
+        const value = Number(raw);
+        return Number.isFinite(value) ? value : DESKTOP_ASSISTANT_MIN_WIDTH;
+    } catch {
+        return DESKTOP_ASSISTANT_MIN_WIDTH;
+    }
+}
+
+function persistAssistantWidth(width: number) {
+    try {
+        window.localStorage.setItem(ASSISTANT_WIDTH_STORAGE_KEY, String(Math.round(width)));
+    } catch {
+        // Ignore localStorage failures and fall back to the in-memory width.
+    }
+}
+
+function getDesktopAssistantMaxWidth() {
+    const contentWidth = dom.contentShell.clientWidth || dom.mainPanel.clientWidth || DESKTOP_ASSISTANT_MIN_WIDTH;
+    return Math.max(DESKTOP_ASSISTANT_MIN_WIDTH, Math.floor(contentWidth * DESKTOP_ASSISTANT_MAX_WIDTH_RATIO));
+}
+
+function clampDesktopAssistantWidth(width: number) {
+    const safeWidth = Number.isFinite(width) ? width : DESKTOP_ASSISTANT_MIN_WIDTH;
+    return Math.min(Math.max(safeWidth, DESKTOP_ASSISTANT_MIN_WIDTH), getDesktopAssistantMaxWidth());
+}
+
+function getDesktopAssistantWidth() {
+    return clampDesktopAssistantWidth(preferredDesktopAssistantWidth);
+}
 
 function refreshAssistantConfigs() {
     assistantConfigs = createAssistantConfigs(getInboxCount(state));
@@ -224,6 +269,20 @@ function dismissToast() {
 
 function isMobileViewport() {
     return mobileViewport.matches;
+}
+
+function syncDesktopAssistantLayout(mobile: boolean, hideAssistantSurface: boolean) {
+    const showDesktopAssistant = !mobile && !hideAssistantSurface && state.assistantOpen;
+    const desktopWidth = showDesktopAssistant ? getDesktopAssistantWidth() : 0;
+
+    if (mobile) {
+        dom.assistantPanel.style.removeProperty("width");
+    } else {
+        dom.assistantPanel.style.width = `${desktopWidth}px`;
+    }
+
+    dom.assistantResizeHandle.classList.toggle("hidden", !showDesktopAssistant);
+    dom.assistantResizeHandle.classList.toggle("assistant-resize-handle-active", assistantResizeState.active);
 }
 
 if (isMobileViewport()) {
@@ -381,15 +440,15 @@ function renderChrome() {
     dom.assistantPanel.classList.toggle("pointer-events-none", mobile && !state.assistantOpen);
     dom.assistantPanel.classList.toggle("pointer-events-auto", !mobile || state.assistantOpen);
 
-    dom.assistantPanel.classList.toggle("lg:w-[340px]", state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:opacity-100", state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:scale-100", state.assistantOpen);
 
-    dom.assistantPanel.classList.toggle("lg:w-0", !state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:opacity-0", !state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:translate-x-6", !state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:scale-[0.98]", !state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:pointer-events-none", !state.assistantOpen);
+
+    syncDesktopAssistantLayout(mobile, hideAssistantSurface);
 
     const showNavButton = mobile && !state.mobileNavOpen && !blockingSurfaceOpen;
     dom.openNavButton.classList.toggle("opacity-100", showNavButton);
@@ -412,6 +471,32 @@ function renderChrome() {
     dom.reopenAssistantButton.classList.toggle("translate-y-4", !showAssistantButton);
     dom.reopenAssistantButton.classList.toggle("scale-90", !showAssistantButton);
     dom.reopenAssistantButton.classList.toggle("pointer-events-none", !showAssistantButton);
+}
+
+function endAssistantResize() {
+    if (!assistantResizeState.active) return;
+
+    if (
+        assistantResizeState.pointerId !== null &&
+        dom.assistantResizeHandle.hasPointerCapture(assistantResizeState.pointerId)
+    ) {
+        dom.assistantResizeHandle.releasePointerCapture(assistantResizeState.pointerId);
+    }
+
+    assistantResizeState.active = false;
+    assistantResizeState.pointerId = null;
+    dom.assistantResizeHandle.classList.remove("assistant-resize-handle-active");
+    document.body.classList.remove("assistant-resizing");
+    persistAssistantWidth(preferredDesktopAssistantWidth);
+    renderChrome();
+}
+
+function handleAssistantResizeMove(event: PointerEvent) {
+    if (!assistantResizeState.active || isMobileViewport() || !state.assistantOpen) return;
+
+    const panelRight = dom.assistantPanel.getBoundingClientRect().right;
+    preferredDesktopAssistantWidth = clampDesktopAssistantWidth(panelRight - event.clientX);
+    syncDesktopAssistantLayout(false, state.currentView === "project-setup");
 }
 
 function render() {
@@ -1672,6 +1757,39 @@ document.addEventListener("click", (event) => {
     }
 });
 
+dom.assistantResizeHandle.addEventListener("pointerdown", (event) => {
+    if (
+        state.auth.status !== "authenticated" ||
+        isMobileViewport() ||
+        !state.assistantOpen ||
+        state.currentView === "project-setup"
+    ) {
+        return;
+    }
+
+    event.preventDefault();
+    assistantResizeState.active = true;
+    assistantResizeState.pointerId = event.pointerId;
+    dom.assistantResizeHandle.classList.add("assistant-resize-handle-active");
+    document.body.classList.add("assistant-resizing");
+    dom.assistantResizeHandle.setPointerCapture(event.pointerId);
+});
+
+document.addEventListener("pointermove", (event) => {
+    if (assistantResizeState.pointerId !== event.pointerId) return;
+    handleAssistantResizeMove(event);
+});
+
+document.addEventListener("pointerup", (event) => {
+    if (assistantResizeState.pointerId !== event.pointerId) return;
+    endAssistantResize();
+});
+
+document.addEventListener("pointercancel", (event) => {
+    if (assistantResizeState.pointerId !== event.pointerId) return;
+    endAssistantResize();
+});
+
 document.addEventListener("dragstart", (event) => {
     if (state.auth.status !== "authenticated") return;
 
@@ -1755,11 +1873,17 @@ document.addEventListener("dragend", () => {
 });
 
 mobileViewport.addEventListener("change", (event) => {
+    endAssistantResize();
     state.mobileNavOpen = false;
     if (event.matches) {
         state.assistantOpen = false;
     }
     render();
+});
+
+window.addEventListener("resize", () => {
+    if (state.auth.status !== "authenticated" || isMobileViewport()) return;
+    renderChrome();
 });
 
 render();

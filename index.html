@@ -55,12 +55,20 @@
         </aside>
 
     
-        <main aria-label="task content" class="h-full w-full lg:flex-1 bg-white rounded-none lg:rounded-[32px] shadow-soft flex flex-col overflow-hidden relative min-w-0" vid="45">
-            <div id="mainView" class="flex-1 min-h-0"></div>
-        </main>
+        <div id="contentShell" class="flex h-full w-full min-w-0 lg:flex-1">
+            <main id="mainPanel" aria-label="task content" class="h-full w-full lg:flex-1 bg-white rounded-none lg:rounded-[32px] shadow-soft flex flex-col overflow-hidden relative min-w-0" vid="45">
+                <div id="mainView" class="flex-1 min-h-0"></div>
+            </main>
 
-    
-        <aside id="assistantPanel" class="inset-y-0 right-0 z-40 w-[340px] max-w-[92vw] flex-shrink-0 bg-white shadow-soft flex flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform origin-right lg:static lg:relative lg:h-full lg:max-w-none lg:rounded-[32px] lg:translate-x-0" vid="188">
+            <div
+                id="assistantResizeHandle"
+                class="assistant-resize-handle hidden lg:flex"
+                aria-hidden="true"
+            >
+                <span class="assistant-resize-handle-bar"></span>
+            </div>
+
+            <aside id="assistantPanel" class="inset-y-0 right-0 z-40 w-[340px] max-w-[92vw] flex-shrink-0 bg-white shadow-soft flex flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform origin-right lg:static lg:relative lg:h-full lg:max-w-none lg:rounded-[32px] lg:translate-x-0" vid="188">
         
         
         <div class="px-6 py-5 flex items-center justify-between border-b border-stone-100 bg-white z-10" vid="189">
@@ -95,7 +103,8 @@
             </div>
             <div id="assistantInputHint" class="hidden" vid="233"></div>
         </div>
-        </aside>
+            </aside>
+        </div>
 
         <button id="openNavButton" data-action="open-nav" aria-label="open navigation" class="fixed bottom-6 left-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-white text-stone-900 shadow-float transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:hidden">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">

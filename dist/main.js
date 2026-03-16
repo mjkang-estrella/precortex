@@ -11609,6 +11609,9 @@ function renderUpcomingView({ weekDays, groups, editingTaskId, editingTaskDraft 
 
 // src/main.ts
 var AUTH_HINT_STORAGE_KEY = "precortex.authHint";
+var ASSISTANT_WIDTH_STORAGE_KEY = "precortex.assistantWidth";
+var DESKTOP_ASSISTANT_MIN_WIDTH = 340;
+var DESKTOP_ASSISTANT_MAX_WIDTH_RATIO = 0.45;
 var store = createStore();
 var state = store.state;
 var assistantConfigs = store.assistantConfigs;
@@ -11627,15 +11630,23 @@ var dragState = {
   listId: null,
   justDragged: false
 };
+var assistantResizeState = {
+  active: false,
+  pointerId: null
+};
+var preferredDesktopAssistantWidth = readStoredAssistantWidth();
 var dom = {
   authRoot: byId("authRoot"),
   appShell: byId("appShell"),
+  contentShell: byId("contentShell"),
+  mainPanel: byId("mainPanel"),
   mainView: byId("mainView"),
   aiMessages: byId("aiMessages"),
   assistantQuickActions: byId("assistantQuickActions"),
   assistantTitle: byId("assistantTitle"),
   assistantQuickActionsLabel: byId("assistantQuickActionsLabel"),
   assistantInputHint: byId("assistantInputHint"),
+  assistantResizeHandle: byId("assistantResizeHandle"),
   assistantPanel: byId("assistantPanel"),
   navInboxCount: byId("navInboxCount"),
   projectNav: byId("projectNav"),
@@ -11655,6 +11666,33 @@ var destinationLabels = {
   later: "later"
 };
 var activeToastTimer = null;
+function readStoredAssistantWidth() {
+  try {
+    const raw = window.localStorage.getItem(ASSISTANT_WIDTH_STORAGE_KEY);
+    if (!raw) return DESKTOP_ASSISTANT_MIN_WIDTH;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : DESKTOP_ASSISTANT_MIN_WIDTH;
+  } catch {
+    return DESKTOP_ASSISTANT_MIN_WIDTH;
+  }
+}
+function persistAssistantWidth(width) {
+  try {
+    window.localStorage.setItem(ASSISTANT_WIDTH_STORAGE_KEY, String(Math.round(width)));
+  } catch {
+  }
+}
+function getDesktopAssistantMaxWidth() {
+  const contentWidth = dom.contentShell.clientWidth || dom.mainPanel.clientWidth || DESKTOP_ASSISTANT_MIN_WIDTH;
+  return Math.max(DESKTOP_ASSISTANT_MIN_WIDTH, Math.floor(contentWidth * DESKTOP_ASSISTANT_MAX_WIDTH_RATIO));
+}
+function clampDesktopAssistantWidth(width) {
+  const safeWidth = Number.isFinite(width) ? width : DESKTOP_ASSISTANT_MIN_WIDTH;
+  return Math.min(Math.max(safeWidth, DESKTOP_ASSISTANT_MIN_WIDTH), getDesktopAssistantMaxWidth());
+}
+function getDesktopAssistantWidth() {
+  return clampDesktopAssistantWidth(preferredDesktopAssistantWidth);
+}
 function refreshAssistantConfigs() {
   assistantConfigs = createAssistantConfigs(getInboxCount(state));
 }
@@ -11762,6 +11800,17 @@ function dismissToast() {
 }
 function isMobileViewport() {
   return mobileViewport.matches;
+}
+function syncDesktopAssistantLayout(mobile, hideAssistantSurface) {
+  const showDesktopAssistant = !mobile && !hideAssistantSurface && state.assistantOpen;
+  const desktopWidth = showDesktopAssistant ? getDesktopAssistantWidth() : 0;
+  if (mobile) {
+    dom.assistantPanel.style.removeProperty("width");
+  } else {
+    dom.assistantPanel.style.width = `${desktopWidth}px`;
+  }
+  dom.assistantResizeHandle.classList.toggle("hidden", !showDesktopAssistant);
+  dom.assistantResizeHandle.classList.toggle("assistant-resize-handle-active", assistantResizeState.active);
 }
 if (isMobileViewport()) {
   state.assistantOpen = false;
@@ -11894,14 +11943,13 @@ function renderChrome() {
   dom.assistantPanel.classList.toggle("translate-x-full", mobile && !state.assistantOpen);
   dom.assistantPanel.classList.toggle("pointer-events-none", mobile && !state.assistantOpen);
   dom.assistantPanel.classList.toggle("pointer-events-auto", !mobile || state.assistantOpen);
-  dom.assistantPanel.classList.toggle("lg:w-[340px]", state.assistantOpen);
   dom.assistantPanel.classList.toggle("lg:opacity-100", state.assistantOpen);
   dom.assistantPanel.classList.toggle("lg:scale-100", state.assistantOpen);
-  dom.assistantPanel.classList.toggle("lg:w-0", !state.assistantOpen);
   dom.assistantPanel.classList.toggle("lg:opacity-0", !state.assistantOpen);
   dom.assistantPanel.classList.toggle("lg:translate-x-6", !state.assistantOpen);
   dom.assistantPanel.classList.toggle("lg:scale-[0.98]", !state.assistantOpen);
   dom.assistantPanel.classList.toggle("lg:pointer-events-none", !state.assistantOpen);
+  syncDesktopAssistantLayout(mobile, hideAssistantSurface);
   const showNavButton = mobile && !state.mobileNavOpen && !blockingSurfaceOpen;
   dom.openNavButton.classList.toggle("opacity-100", showNavButton);
   dom.openNavButton.classList.toggle("translate-y-0", showNavButton);
@@ -11921,6 +11969,24 @@ function renderChrome() {
   dom.reopenAssistantButton.classList.toggle("translate-y-4", !showAssistantButton);
   dom.reopenAssistantButton.classList.toggle("scale-90", !showAssistantButton);
   dom.reopenAssistantButton.classList.toggle("pointer-events-none", !showAssistantButton);
+}
+function endAssistantResize() {
+  if (!assistantResizeState.active) return;
+  if (assistantResizeState.pointerId !== null && dom.assistantResizeHandle.hasPointerCapture(assistantResizeState.pointerId)) {
+    dom.assistantResizeHandle.releasePointerCapture(assistantResizeState.pointerId);
+  }
+  assistantResizeState.active = false;
+  assistantResizeState.pointerId = null;
+  dom.assistantResizeHandle.classList.remove("assistant-resize-handle-active");
+  document.body.classList.remove("assistant-resizing");
+  persistAssistantWidth(preferredDesktopAssistantWidth);
+  renderChrome();
+}
+function handleAssistantResizeMove(event) {
+  if (!assistantResizeState.active || isMobileViewport() || !state.assistantOpen) return;
+  const panelRight = dom.assistantPanel.getBoundingClientRect().right;
+  preferredDesktopAssistantWidth = clampDesktopAssistantWidth(panelRight - event.clientX);
+  syncDesktopAssistantLayout(false, state.currentView === "project-setup");
 }
 function render() {
   const shouldKeepShellVisible = state.auth.status === "authenticated" || state.auth.status === "loading" && hasStoredAuthHint;
@@ -12970,6 +13036,29 @@ document.addEventListener("click", (event) => {
     return;
   }
 });
+dom.assistantResizeHandle.addEventListener("pointerdown", (event) => {
+  if (state.auth.status !== "authenticated" || isMobileViewport() || !state.assistantOpen || state.currentView === "project-setup") {
+    return;
+  }
+  event.preventDefault();
+  assistantResizeState.active = true;
+  assistantResizeState.pointerId = event.pointerId;
+  dom.assistantResizeHandle.classList.add("assistant-resize-handle-active");
+  document.body.classList.add("assistant-resizing");
+  dom.assistantResizeHandle.setPointerCapture(event.pointerId);
+});
+document.addEventListener("pointermove", (event) => {
+  if (assistantResizeState.pointerId !== event.pointerId) return;
+  handleAssistantResizeMove(event);
+});
+document.addEventListener("pointerup", (event) => {
+  if (assistantResizeState.pointerId !== event.pointerId) return;
+  endAssistantResize();
+});
+document.addEventListener("pointercancel", (event) => {
+  if (assistantResizeState.pointerId !== event.pointerId) return;
+  endAssistantResize();
+});
 document.addEventListener("dragstart", (event) => {
   if (state.auth.status !== "authenticated") return;
   const target = event.target;
@@ -13038,11 +13127,16 @@ document.addEventListener("dragend", () => {
   }, 0);
 });
 mobileViewport.addEventListener("change", (event) => {
+  endAssistantResize();
   state.mobileNavOpen = false;
   if (event.matches) {
     state.assistantOpen = false;
   }
   render();
+});
+window.addEventListener("resize", () => {
+  if (state.auth.status !== "authenticated" || isMobileViewport()) return;
+  renderChrome();
 });
 render();
 void bootstrapAuth();

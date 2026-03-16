@@ -257,6 +257,36 @@ details:not([open]) .details-chevron {
     animation: toastOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.assistant-resize-handle {
+    width: 18px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    cursor: col-resize;
+    user-select: none;
+    touch-action: none;
+}
+
+.assistant-resize-handle-bar {
+    width: 4px;
+    height: min(88px, 22vh);
+    border-radius: 9999px;
+    background: rgba(17, 17, 17, 0.08);
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.assistant-resize-handle:hover .assistant-resize-handle-bar,
+.assistant-resize-handle-active .assistant-resize-handle-bar {
+    background: rgba(17, 17, 17, 0.2);
+    transform: scaleX(1.1);
+}
+
+body.assistant-resizing,
+body.assistant-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
 @supports (field-sizing: content) {
     textarea {
         field-sizing: content;
@@ -288,6 +318,10 @@ details:not([open]) .details-chevron {
 
     #assistantPanel {
         right: 0;
+    }
+
+    #assistantResizeHandle {
+        display: none !important;
     }
 }
 
