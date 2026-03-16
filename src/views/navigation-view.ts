@@ -14,7 +14,7 @@ export function renderNavigation({
     const safeDisplayName = escapeHtml(displayName);
     const safeEmail = escapeHtml(authUser?.email || "authenticated");
     const avatarMarkup = authUser?.picture
-        ? `<img src="${escapeHtml(authUser.picture)}" alt="" class="w-10 h-10 rounded-full object-cover shadow-sm">`
+        ? `<img src="${escapeHtml(authUser.picture)}" alt="" loading="lazy" class="w-10 h-10 rounded-full object-cover shadow-sm">`
         : `<div class="w-10 h-10 rounded-full bg-stone-900 text-white flex items-center justify-center font-medium shadow-sm">${displayName
               .slice(0, 1)
               .toUpperCase()}</div>`;
@@ -60,6 +60,14 @@ export function renderNavigation({
         currentView === "inbox"
             ? "bg-white/20 text-white px-2 py-0.5 rounded-full text-[10px] font-bold transition-all"
             : "bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all";
+
+    const addProjectButton = document.querySelector('[data-action="open-project-setup"]');
+    if (addProjectButton) {
+        addProjectButton.className =
+            currentView === "project-setup"
+                ? "w-9 h-9 rounded-full border border-stone-900 bg-stone-900 text-white transition-colors flex items-center justify-center shadow-sm"
+                : "w-9 h-9 rounded-full border border-stone-200 bg-white text-stone-400 hover:text-stone-900 hover:border-stone-400 hover:bg-stone-50 transition-colors flex items-center justify-center";
+    }
 
     projectNav.innerHTML = projects
         .map((project) => {

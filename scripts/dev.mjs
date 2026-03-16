@@ -1,5 +1,6 @@
 import { createReadStream, existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import * as esbuild from "esbuild";
 import http from "node:http";
 import path from "node:path";
@@ -23,6 +24,12 @@ const mimeTypes = new Map([
 ]);
 
 writePublicConfig("dist/config.js");
+
+const tailwindProcess = spawn(
+    "npx",
+    ["tailwindcss", "-i", "styles/input.css", "-o", "dist/tailwind.css", "--watch"],
+    { stdio: "inherit" },
+);
 
 const compiler = await esbuild.context({
     entryPoints: ["src/main.ts"],
@@ -70,6 +77,7 @@ let closing = false;
 function shutdown(exitCode = 0) {
     if (closing) return;
     closing = true;
+    tailwindProcess.kill();
     server.close(() => {
         compiler.dispose();
         process.exit(exitCode);

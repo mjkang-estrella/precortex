@@ -1,7 +1,20 @@
+var __defProp = Object.defineProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
 // node_modules/convex/dist/esm/index.js
 var version = "1.33.0";
 
 // node_modules/convex/dist/esm/values/base64.js
+var base64_exports = {};
+__export(base64_exports, {
+  byteLength: () => byteLength,
+  fromByteArray: () => fromByteArray,
+  fromByteArrayUrlSafeNoPadding: () => fromByteArrayUrlSafeNoPadding,
+  toByteArray: () => toByteArray
+});
 var lookup = [];
 var revLookup = [];
 var Arr = Uint8Array;
@@ -23,6 +36,12 @@ function getLens(b64) {
   if (validLen === -1) validLen = len;
   var placeHoldersLen = validLen === len ? 0 : 4 - validLen % 4;
   return [validLen, placeHoldersLen];
+}
+function byteLength(b64) {
+  var lens = getLens(b64);
+  var validLen = lens[0];
+  var placeHoldersLen = lens[1];
+  return (validLen + placeHoldersLen) * 3 / 4 - placeHoldersLen;
 }
 function _byteLength(_b64, validLen, placeHoldersLen) {
   return (validLen + placeHoldersLen) * 3 / 4 - placeHoldersLen;
@@ -90,6 +109,9 @@ function fromByteArray(uint8) {
     );
   }
   return parts.join("");
+}
+function fromByteArrayUrlSafeNoPadding(uint8) {
+  return fromByteArray(uint8).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
 // node_modules/convex/dist/esm/common/index.js
@@ -426,8 +448,8 @@ function convexToJson(value) {
 }
 
 // node_modules/convex/dist/esm/values/validators.js
-var __defProp = Object.defineProperty;
-var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __defProp2 = Object.defineProperty;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp2(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 var UNDEFINED_VALIDATOR_ERROR_URL = "https://docs.convex.dev/error#undefined-validator";
 function throwUndefinedValidatorError(context, fieldName) {
@@ -1087,8 +1109,8 @@ var v = {
 };
 
 // node_modules/convex/dist/esm/values/errors.js
-var __defProp2 = Object.defineProperty;
-var __defNormalProp2 = (obj, key, value) => key in obj ? __defProp2(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __defProp3 = Object.defineProperty;
+var __defNormalProp2 = (obj, key, value) => key in obj ? __defProp3(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField2 = (obj, key, value) => __defNormalProp2(obj, typeof key !== "symbol" ? key + "" : key, value);
 var _a;
 var _b;
@@ -1109,8 +1131,8 @@ var aBytes = arr();
 var bBytes = arr();
 
 // node_modules/convex/dist/esm/browser/logging.js
-var __defProp3 = Object.defineProperty;
-var __defNormalProp3 = (obj, key, value) => key in obj ? __defProp3(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __defProp4 = Object.defineProperty;
+var __defNormalProp3 = (obj, key, value) => key in obj ? __defProp4(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField3 = (obj, key, value) => __defNormalProp3(obj, typeof key !== "symbol" ? key + "" : key, value);
 var INFO_COLOR = "color:rgb(0, 145, 255)";
 function prefix_for_source(source) {
@@ -1215,6 +1237,555 @@ function logForFunction(logger, type, source, udfPath, message) {
     logger.error(`[CONVEX ${prefix}(${udfPath})] ${message}`);
   }
 }
+function logFatalError(logger, message) {
+  const errorMessage = `[CONVEX FATAL ERROR] ${message}`;
+  logger.error(errorMessage);
+  return new Error(errorMessage);
+}
+function createHybridErrorStacktrace(source, udfPath, result) {
+  const prefix = prefix_for_source(source);
+  return `[CONVEX ${prefix}(${udfPath})] ${result.errorMessage}
+  Called by client`;
+}
+function forwardData(result, error) {
+  error.data = result.errorData;
+  return error;
+}
+
+// node_modules/convex/dist/esm/browser/sync/udf_path_utils.js
+function canonicalizeUdfPath(udfPath) {
+  const pieces = udfPath.split(":");
+  let moduleName;
+  let functionName2;
+  if (pieces.length === 1) {
+    moduleName = pieces[0];
+    functionName2 = "default";
+  } else {
+    moduleName = pieces.slice(0, pieces.length - 1).join(":");
+    functionName2 = pieces[pieces.length - 1];
+  }
+  if (moduleName.endsWith(".js")) {
+    moduleName = moduleName.slice(0, -3);
+  }
+  return `${moduleName}:${functionName2}`;
+}
+function serializePathAndArgs(udfPath, args) {
+  return JSON.stringify({
+    udfPath: canonicalizeUdfPath(udfPath),
+    args: convexToJson(args)
+  });
+}
+function serializePaginatedPathAndArgs(udfPath, args, options) {
+  const { initialNumItems, id } = options;
+  const result = JSON.stringify({
+    type: "paginated",
+    udfPath: canonicalizeUdfPath(udfPath),
+    args: convexToJson(args),
+    options: convexToJson({ initialNumItems, id })
+  });
+  return result;
+}
+function serializedQueryTokenIsPaginated(token) {
+  return JSON.parse(token).type === "paginated";
+}
+
+// node_modules/convex/dist/esm/browser/sync/local_state.js
+var __defProp5 = Object.defineProperty;
+var __defNormalProp4 = (obj, key, value) => key in obj ? __defProp5(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField4 = (obj, key, value) => __defNormalProp4(obj, typeof key !== "symbol" ? key + "" : key, value);
+var LocalSyncState = class {
+  constructor() {
+    __publicField4(this, "nextQueryId");
+    __publicField4(this, "querySetVersion");
+    __publicField4(this, "querySet");
+    __publicField4(this, "queryIdToToken");
+    __publicField4(this, "identityVersion");
+    __publicField4(this, "auth");
+    __publicField4(this, "outstandingQueriesOlderThanRestart");
+    __publicField4(this, "outstandingAuthOlderThanRestart");
+    __publicField4(this, "paused");
+    __publicField4(this, "pendingQuerySetModifications");
+    this.nextQueryId = 0;
+    this.querySetVersion = 0;
+    this.identityVersion = 0;
+    this.querySet = /* @__PURE__ */ new Map();
+    this.queryIdToToken = /* @__PURE__ */ new Map();
+    this.outstandingQueriesOlderThanRestart = /* @__PURE__ */ new Set();
+    this.outstandingAuthOlderThanRestart = false;
+    this.paused = false;
+    this.pendingQuerySetModifications = /* @__PURE__ */ new Map();
+  }
+  hasSyncedPastLastReconnect() {
+    return this.outstandingQueriesOlderThanRestart.size === 0 && !this.outstandingAuthOlderThanRestart;
+  }
+  markAuthCompletion() {
+    this.outstandingAuthOlderThanRestart = false;
+  }
+  subscribe(udfPath, args, journal, componentPath) {
+    const canonicalizedUdfPath = canonicalizeUdfPath(udfPath);
+    const queryToken = serializePathAndArgs(canonicalizedUdfPath, args);
+    const existingEntry = this.querySet.get(queryToken);
+    if (existingEntry !== void 0) {
+      existingEntry.numSubscribers += 1;
+      return {
+        queryToken,
+        modification: null,
+        unsubscribe: () => this.removeSubscriber(queryToken)
+      };
+    } else {
+      const queryId = this.nextQueryId++;
+      const query = {
+        id: queryId,
+        canonicalizedUdfPath,
+        args,
+        numSubscribers: 1,
+        journal,
+        componentPath
+      };
+      this.querySet.set(queryToken, query);
+      this.queryIdToToken.set(queryId, queryToken);
+      const baseVersion = this.querySetVersion;
+      const newVersion = this.querySetVersion + 1;
+      const add = {
+        type: "Add",
+        queryId,
+        udfPath: canonicalizedUdfPath,
+        args: [convexToJson(args)],
+        journal,
+        componentPath
+      };
+      if (this.paused) {
+        this.pendingQuerySetModifications.set(queryId, add);
+      } else {
+        this.querySetVersion = newVersion;
+      }
+      const modification = {
+        type: "ModifyQuerySet",
+        baseVersion,
+        newVersion,
+        modifications: [add]
+      };
+      return {
+        queryToken,
+        modification,
+        unsubscribe: () => this.removeSubscriber(queryToken)
+      };
+    }
+  }
+  transition(transition) {
+    for (const modification of transition.modifications) {
+      switch (modification.type) {
+        case "QueryUpdated":
+        case "QueryFailed": {
+          this.outstandingQueriesOlderThanRestart.delete(modification.queryId);
+          const journal = modification.journal;
+          if (journal !== void 0) {
+            const queryToken = this.queryIdToToken.get(modification.queryId);
+            if (queryToken !== void 0) {
+              this.querySet.get(queryToken).journal = journal;
+            }
+          }
+          break;
+        }
+        case "QueryRemoved": {
+          this.outstandingQueriesOlderThanRestart.delete(modification.queryId);
+          break;
+        }
+        default: {
+          modification;
+          throw new Error(`Invalid modification ${modification.type}`);
+        }
+      }
+    }
+  }
+  queryId(udfPath, args) {
+    const canonicalizedUdfPath = canonicalizeUdfPath(udfPath);
+    const queryToken = serializePathAndArgs(canonicalizedUdfPath, args);
+    const existingEntry = this.querySet.get(queryToken);
+    if (existingEntry !== void 0) {
+      return existingEntry.id;
+    }
+    return null;
+  }
+  isCurrentOrNewerAuthVersion(version2) {
+    return version2 >= this.identityVersion;
+  }
+  getAuth() {
+    return this.auth;
+  }
+  setAuth(value) {
+    this.auth = {
+      tokenType: "User",
+      value
+    };
+    const baseVersion = this.identityVersion;
+    if (!this.paused) {
+      this.identityVersion = baseVersion + 1;
+    }
+    return {
+      type: "Authenticate",
+      baseVersion,
+      ...this.auth
+    };
+  }
+  setAdminAuth(value, actingAs) {
+    const auth = {
+      tokenType: "Admin",
+      value,
+      impersonating: actingAs
+    };
+    this.auth = auth;
+    const baseVersion = this.identityVersion;
+    if (!this.paused) {
+      this.identityVersion = baseVersion + 1;
+    }
+    return {
+      type: "Authenticate",
+      baseVersion,
+      ...auth
+    };
+  }
+  clearAuth() {
+    this.auth = void 0;
+    this.markAuthCompletion();
+    const baseVersion = this.identityVersion;
+    if (!this.paused) {
+      this.identityVersion = baseVersion + 1;
+    }
+    return {
+      type: "Authenticate",
+      tokenType: "None",
+      baseVersion
+    };
+  }
+  hasAuth() {
+    return !!this.auth;
+  }
+  isNewAuth(value) {
+    return this.auth?.value !== value;
+  }
+  queryPath(queryId) {
+    const pathAndArgs = this.queryIdToToken.get(queryId);
+    if (pathAndArgs) {
+      return this.querySet.get(pathAndArgs).canonicalizedUdfPath;
+    }
+    return null;
+  }
+  queryArgs(queryId) {
+    const pathAndArgs = this.queryIdToToken.get(queryId);
+    if (pathAndArgs) {
+      return this.querySet.get(pathAndArgs).args;
+    }
+    return null;
+  }
+  queryToken(queryId) {
+    return this.queryIdToToken.get(queryId) ?? null;
+  }
+  queryJournal(queryToken) {
+    return this.querySet.get(queryToken)?.journal;
+  }
+  restart(oldRemoteQueryResults) {
+    this.unpause();
+    this.outstandingQueriesOlderThanRestart.clear();
+    const modifications = [];
+    for (const localQuery of this.querySet.values()) {
+      const add = {
+        type: "Add",
+        queryId: localQuery.id,
+        udfPath: localQuery.canonicalizedUdfPath,
+        args: [convexToJson(localQuery.args)],
+        journal: localQuery.journal,
+        componentPath: localQuery.componentPath
+      };
+      modifications.push(add);
+      if (!oldRemoteQueryResults.has(localQuery.id)) {
+        this.outstandingQueriesOlderThanRestart.add(localQuery.id);
+      }
+    }
+    this.querySetVersion = 1;
+    const querySet = {
+      type: "ModifyQuerySet",
+      baseVersion: 0,
+      newVersion: 1,
+      modifications
+    };
+    if (!this.auth) {
+      this.identityVersion = 0;
+      return [querySet, void 0];
+    }
+    this.outstandingAuthOlderThanRestart = true;
+    const authenticate = {
+      type: "Authenticate",
+      baseVersion: 0,
+      ...this.auth
+    };
+    this.identityVersion = 1;
+    return [querySet, authenticate];
+  }
+  pause() {
+    this.paused = true;
+  }
+  resume() {
+    const querySet = this.pendingQuerySetModifications.size > 0 ? {
+      type: "ModifyQuerySet",
+      baseVersion: this.querySetVersion,
+      newVersion: ++this.querySetVersion,
+      modifications: Array.from(
+        this.pendingQuerySetModifications.values()
+      )
+    } : void 0;
+    const authenticate = this.auth !== void 0 ? {
+      type: "Authenticate",
+      baseVersion: this.identityVersion++,
+      ...this.auth
+    } : void 0;
+    this.unpause();
+    return [querySet, authenticate];
+  }
+  unpause() {
+    this.paused = false;
+    this.pendingQuerySetModifications.clear();
+  }
+  removeSubscriber(queryToken) {
+    const localQuery = this.querySet.get(queryToken);
+    if (localQuery.numSubscribers > 1) {
+      localQuery.numSubscribers -= 1;
+      return null;
+    } else {
+      this.querySet.delete(queryToken);
+      this.queryIdToToken.delete(localQuery.id);
+      this.outstandingQueriesOlderThanRestart.delete(localQuery.id);
+      const baseVersion = this.querySetVersion;
+      const newVersion = this.querySetVersion + 1;
+      const remove = {
+        type: "Remove",
+        queryId: localQuery.id
+      };
+      if (this.paused) {
+        if (this.pendingQuerySetModifications.has(localQuery.id)) {
+          this.pendingQuerySetModifications.delete(localQuery.id);
+        } else {
+          this.pendingQuerySetModifications.set(localQuery.id, remove);
+        }
+      } else {
+        this.querySetVersion = newVersion;
+      }
+      return {
+        type: "ModifyQuerySet",
+        baseVersion,
+        newVersion,
+        modifications: [remove]
+      };
+    }
+  }
+};
+
+// node_modules/convex/dist/esm/browser/sync/request_manager.js
+var __defProp6 = Object.defineProperty;
+var __defNormalProp5 = (obj, key, value) => key in obj ? __defProp6(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField5 = (obj, key, value) => __defNormalProp5(obj, typeof key !== "symbol" ? key + "" : key, value);
+var RequestManager = class {
+  constructor(logger, markConnectionStateDirty) {
+    this.logger = logger;
+    this.markConnectionStateDirty = markConnectionStateDirty;
+    __publicField5(this, "inflightRequests");
+    __publicField5(this, "requestsOlderThanRestart");
+    __publicField5(this, "inflightMutationsCount", 0);
+    __publicField5(this, "inflightActionsCount", 0);
+    this.inflightRequests = /* @__PURE__ */ new Map();
+    this.requestsOlderThanRestart = /* @__PURE__ */ new Set();
+  }
+  request(message, sent) {
+    const result = new Promise((resolve) => {
+      const status = sent ? "Requested" : "NotSent";
+      this.inflightRequests.set(message.requestId, {
+        message,
+        status: { status, requestedAt: /* @__PURE__ */ new Date(), onResult: resolve }
+      });
+      if (message.type === "Mutation") {
+        this.inflightMutationsCount++;
+      } else if (message.type === "Action") {
+        this.inflightActionsCount++;
+      }
+    });
+    this.markConnectionStateDirty();
+    return result;
+  }
+  /**
+   * Update the state after receiving a response.
+   *
+   * @returns A RequestId if the request is complete and its optimistic update
+   * can be dropped, null otherwise.
+   */
+  onResponse(response) {
+    const requestInfo = this.inflightRequests.get(response.requestId);
+    if (requestInfo === void 0) {
+      return null;
+    }
+    if (requestInfo.status.status === "Completed") {
+      return null;
+    }
+    const udfType = requestInfo.message.type === "Mutation" ? "mutation" : "action";
+    const udfPath = requestInfo.message.udfPath;
+    for (const line of response.logLines) {
+      logForFunction(this.logger, "info", udfType, udfPath, line);
+    }
+    const status = requestInfo.status;
+    let result;
+    let onResolve;
+    if (response.success) {
+      result = {
+        success: true,
+        logLines: response.logLines,
+        value: jsonToConvex(response.result)
+      };
+      onResolve = () => status.onResult(result);
+    } else {
+      const errorMessage = response.result;
+      const { errorData } = response;
+      logForFunction(this.logger, "error", udfType, udfPath, errorMessage);
+      result = {
+        success: false,
+        errorMessage,
+        errorData: errorData !== void 0 ? jsonToConvex(errorData) : void 0,
+        logLines: response.logLines
+      };
+      onResolve = () => status.onResult(result);
+    }
+    if (response.type === "ActionResponse" || !response.success) {
+      onResolve();
+      this.inflightRequests.delete(response.requestId);
+      this.requestsOlderThanRestart.delete(response.requestId);
+      if (requestInfo.message.type === "Action") {
+        this.inflightActionsCount--;
+      } else if (requestInfo.message.type === "Mutation") {
+        this.inflightMutationsCount--;
+      }
+      this.markConnectionStateDirty();
+      return { requestId: response.requestId, result };
+    }
+    requestInfo.status = {
+      status: "Completed",
+      result,
+      ts: response.ts,
+      onResolve
+    };
+    return null;
+  }
+  // Remove and returns completed requests.
+  removeCompleted(ts) {
+    const completeRequests = /* @__PURE__ */ new Map();
+    for (const [requestId, requestInfo] of this.inflightRequests.entries()) {
+      const status = requestInfo.status;
+      if (status.status === "Completed" && status.ts.lessThanOrEqual(ts)) {
+        status.onResolve();
+        completeRequests.set(requestId, status.result);
+        if (requestInfo.message.type === "Mutation") {
+          this.inflightMutationsCount--;
+        } else if (requestInfo.message.type === "Action") {
+          this.inflightActionsCount--;
+        }
+        this.inflightRequests.delete(requestId);
+        this.requestsOlderThanRestart.delete(requestId);
+      }
+    }
+    if (completeRequests.size > 0) {
+      this.markConnectionStateDirty();
+    }
+    return completeRequests;
+  }
+  restart() {
+    this.requestsOlderThanRestart = new Set(this.inflightRequests.keys());
+    const allMessages = [];
+    for (const [requestId, value] of this.inflightRequests) {
+      if (value.status.status === "NotSent") {
+        value.status.status = "Requested";
+        allMessages.push(value.message);
+        continue;
+      }
+      if (value.message.type === "Mutation") {
+        allMessages.push(value.message);
+      } else if (value.message.type === "Action") {
+        this.inflightRequests.delete(requestId);
+        this.requestsOlderThanRestart.delete(requestId);
+        this.inflightActionsCount--;
+        if (value.status.status === "Completed") {
+          throw new Error("Action should never be in 'Completed' state");
+        }
+        value.status.onResult({
+          success: false,
+          errorMessage: "Connection lost while action was in flight",
+          logLines: []
+        });
+      }
+    }
+    this.markConnectionStateDirty();
+    return allMessages;
+  }
+  resume() {
+    const allMessages = [];
+    for (const [, value] of this.inflightRequests) {
+      if (value.status.status === "NotSent") {
+        value.status.status = "Requested";
+        allMessages.push(value.message);
+        continue;
+      }
+    }
+    return allMessages;
+  }
+  /**
+   * @returns true if there are any requests that have been requested but have
+   * not be completed yet.
+   */
+  hasIncompleteRequests() {
+    for (const requestInfo of this.inflightRequests.values()) {
+      if (requestInfo.status.status === "Requested") {
+        return true;
+      }
+    }
+    return false;
+  }
+  /**
+   * @returns true if there are any inflight requests, including ones that have
+   * completed on the server, but have not been applied.
+   */
+  hasInflightRequests() {
+    return this.inflightRequests.size > 0;
+  }
+  /**
+   * @returns true if there are any inflight requests, that have been hanging around
+   * since prior to the most recent restart.
+   */
+  hasSyncedPastLastReconnect() {
+    return this.requestsOlderThanRestart.size === 0;
+  }
+  timeOfOldestInflightRequest() {
+    if (this.inflightRequests.size === 0) {
+      return null;
+    }
+    let oldestInflightRequest = Date.now();
+    for (const request of this.inflightRequests.values()) {
+      if (request.status.status !== "Completed") {
+        if (request.status.requestedAt.getTime() < oldestInflightRequest) {
+          oldestInflightRequest = request.status.requestedAt.getTime();
+        }
+      }
+    }
+    return new Date(oldestInflightRequest);
+  }
+  /**
+   * @returns The number of mutations currently in flight.
+   */
+  inflightMutations() {
+    return this.inflightMutationsCount;
+  }
+  /**
+   * @returns The number of actions currently in flight.
+   */
+  inflightActions() {
+    return this.inflightActionsCount;
+  }
+};
 
 // node_modules/convex/dist/esm/server/functionName.js
 var functionName = /* @__PURE__ */ Symbol.for("functionName");
@@ -1302,15 +1873,170 @@ function createApi(pathParts = []) {
 }
 var anyApi = createApi();
 
+// node_modules/convex/dist/esm/browser/sync/optimistic_updates_impl.js
+var __defProp7 = Object.defineProperty;
+var __defNormalProp6 = (obj, key, value) => key in obj ? __defProp7(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField6 = (obj, key, value) => __defNormalProp6(obj, typeof key !== "symbol" ? key + "" : key, value);
+var OptimisticLocalStoreImpl = class _OptimisticLocalStoreImpl {
+  constructor(queryResults) {
+    __publicField6(this, "queryResults");
+    __publicField6(this, "modifiedQueries");
+    this.queryResults = queryResults;
+    this.modifiedQueries = [];
+  }
+  getQuery(query, ...args) {
+    const queryArgs = parseArgs(args[0]);
+    const name = getFunctionName(query);
+    const queryResult = this.queryResults.get(
+      serializePathAndArgs(name, queryArgs)
+    );
+    if (queryResult === void 0) {
+      return void 0;
+    }
+    return _OptimisticLocalStoreImpl.queryValue(queryResult.result);
+  }
+  getAllQueries(query) {
+    const queriesWithName = [];
+    const name = getFunctionName(query);
+    for (const queryResult of this.queryResults.values()) {
+      if (queryResult.udfPath === canonicalizeUdfPath(name)) {
+        queriesWithName.push({
+          args: queryResult.args,
+          value: _OptimisticLocalStoreImpl.queryValue(queryResult.result)
+        });
+      }
+    }
+    return queriesWithName;
+  }
+  setQuery(queryReference, args, value) {
+    const queryArgs = parseArgs(args);
+    const name = getFunctionName(queryReference);
+    const queryToken = serializePathAndArgs(name, queryArgs);
+    let result;
+    if (value === void 0) {
+      result = void 0;
+    } else {
+      result = {
+        success: true,
+        value,
+        // It's an optimistic update, so there are no function logs to show.
+        logLines: []
+      };
+    }
+    const query = {
+      udfPath: name,
+      args: queryArgs,
+      result
+    };
+    this.queryResults.set(queryToken, query);
+    this.modifiedQueries.push(queryToken);
+  }
+  static queryValue(result) {
+    if (result === void 0) {
+      return void 0;
+    } else if (result.success) {
+      return result.value;
+    } else {
+      return void 0;
+    }
+  }
+};
+var OptimisticQueryResults = class {
+  constructor() {
+    __publicField6(this, "queryResults");
+    __publicField6(this, "optimisticUpdates");
+    this.queryResults = /* @__PURE__ */ new Map();
+    this.optimisticUpdates = [];
+  }
+  /**
+   * Apply all optimistic updates on top of server query results
+   */
+  ingestQueryResultsFromServer(serverQueryResults, optimisticUpdatesToDrop) {
+    this.optimisticUpdates = this.optimisticUpdates.filter((updateAndId) => {
+      return !optimisticUpdatesToDrop.has(updateAndId.mutationId);
+    });
+    const oldQueryResults = this.queryResults;
+    this.queryResults = new Map(serverQueryResults);
+    const localStore = new OptimisticLocalStoreImpl(this.queryResults);
+    for (const updateAndId of this.optimisticUpdates) {
+      updateAndId.update(localStore);
+    }
+    const changedQueries = [];
+    for (const [queryToken, query] of this.queryResults) {
+      const oldQuery = oldQueryResults.get(queryToken);
+      if (oldQuery === void 0 || oldQuery.result !== query.result) {
+        changedQueries.push(queryToken);
+      }
+    }
+    return changedQueries;
+  }
+  applyOptimisticUpdate(update, mutationId) {
+    this.optimisticUpdates.push({
+      update,
+      mutationId
+    });
+    const localStore = new OptimisticLocalStoreImpl(this.queryResults);
+    update(localStore);
+    return localStore.modifiedQueries;
+  }
+  /**
+   * "Raw" with respect to errors vs values, but query results still have
+   * optimistic updates applied.
+   *
+   * @internal
+   */
+  rawQueryResult(queryToken) {
+    const query = this.queryResults.get(queryToken);
+    if (query === void 0) {
+      return void 0;
+    }
+    return query.result;
+  }
+  queryResult(queryToken) {
+    const query = this.queryResults.get(queryToken);
+    if (query === void 0) {
+      return void 0;
+    }
+    const result = query.result;
+    if (result === void 0) {
+      return void 0;
+    } else if (result.success) {
+      return result.value;
+    } else {
+      if (result.errorData !== void 0) {
+        throw forwardData(
+          result,
+          new ConvexError(
+            createHybridErrorStacktrace("query", query.udfPath, result)
+          )
+        );
+      }
+      throw new Error(
+        createHybridErrorStacktrace("query", query.udfPath, result)
+      );
+    }
+  }
+  hasQueryResult(queryToken) {
+    return this.queryResults.get(queryToken) !== void 0;
+  }
+  /**
+   * @internal
+   */
+  queryLogs(queryToken) {
+    const query = this.queryResults.get(queryToken);
+    return query?.result?.logLines;
+  }
+};
+
 // node_modules/convex/dist/esm/vendor/long.js
-var __defProp4 = Object.defineProperty;
-var __defNormalProp4 = (obj, key, value) => key in obj ? __defProp4(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField4 = (obj, key, value) => __defNormalProp4(obj, typeof key !== "symbol" ? key + "" : key, value);
+var __defProp8 = Object.defineProperty;
+var __defNormalProp7 = (obj, key, value) => key in obj ? __defProp8(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField7 = (obj, key, value) => __defNormalProp7(obj, typeof key !== "symbol" ? key + "" : key, value);
 var Long = class _Long {
   constructor(low, high) {
-    __publicField4(this, "low");
-    __publicField4(this, "high");
-    __publicField4(this, "__isUnsignedLong__");
+    __publicField7(this, "low");
+    __publicField7(this, "high");
+    __publicField7(this, "__isUnsignedLong__");
     this.low = low | 0;
     this.high = high | 0;
     this.__isUnsignedLong__ = true;
@@ -1379,78 +2105,1854 @@ var TWO_PWR_32_DBL = TWO_PWR_16_DBL * TWO_PWR_16_DBL;
 var TWO_PWR_64_DBL = TWO_PWR_32_DBL * TWO_PWR_32_DBL;
 var MAX_UNSIGNED_VALUE = new Long(4294967295 | 0, 4294967295 | 0);
 
+// node_modules/convex/dist/esm/browser/sync/remote_query_set.js
+var __defProp9 = Object.defineProperty;
+var __defNormalProp8 = (obj, key, value) => key in obj ? __defProp9(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField8 = (obj, key, value) => __defNormalProp8(obj, typeof key !== "symbol" ? key + "" : key, value);
+var RemoteQuerySet = class {
+  constructor(queryPath, logger) {
+    __publicField8(this, "version");
+    __publicField8(this, "remoteQuerySet");
+    __publicField8(this, "queryPath");
+    __publicField8(this, "logger");
+    this.version = { querySet: 0, ts: Long.fromNumber(0), identity: 0 };
+    this.remoteQuerySet = /* @__PURE__ */ new Map();
+    this.queryPath = queryPath;
+    this.logger = logger;
+  }
+  transition(transition) {
+    const start = transition.startVersion;
+    if (this.version.querySet !== start.querySet || this.version.ts.notEquals(start.ts) || this.version.identity !== start.identity) {
+      throw new Error(
+        `Invalid start version: ${start.ts.toString()}:${start.querySet}:${start.identity}, transitioning from ${this.version.ts.toString()}:${this.version.querySet}:${this.version.identity}`
+      );
+    }
+    for (const modification of transition.modifications) {
+      switch (modification.type) {
+        case "QueryUpdated": {
+          const queryPath = this.queryPath(modification.queryId);
+          if (queryPath) {
+            for (const line of modification.logLines) {
+              logForFunction(this.logger, "info", "query", queryPath, line);
+            }
+          }
+          const value = jsonToConvex(modification.value ?? null);
+          this.remoteQuerySet.set(modification.queryId, {
+            success: true,
+            value,
+            logLines: modification.logLines
+          });
+          break;
+        }
+        case "QueryFailed": {
+          const queryPath = this.queryPath(modification.queryId);
+          if (queryPath) {
+            for (const line of modification.logLines) {
+              logForFunction(this.logger, "info", "query", queryPath, line);
+            }
+          }
+          const { errorData } = modification;
+          this.remoteQuerySet.set(modification.queryId, {
+            success: false,
+            errorMessage: modification.errorMessage,
+            errorData: errorData !== void 0 ? jsonToConvex(errorData) : void 0,
+            logLines: modification.logLines
+          });
+          break;
+        }
+        case "QueryRemoved": {
+          this.remoteQuerySet.delete(modification.queryId);
+          break;
+        }
+        default: {
+          modification;
+          throw new Error(`Invalid modification ${modification.type}`);
+        }
+      }
+    }
+    this.version = transition.endVersion;
+  }
+  remoteQueryResults() {
+    return this.remoteQuerySet;
+  }
+  timestamp() {
+    return this.version.ts;
+  }
+};
+
+// node_modules/convex/dist/esm/browser/sync/protocol.js
+function u64ToLong(encoded) {
+  const integerBytes = base64_exports.toByteArray(encoded);
+  return Long.fromBytesLE(Array.from(integerBytes));
+}
+function longToU64(raw) {
+  const integerBytes = new Uint8Array(raw.toBytesLE());
+  return base64_exports.fromByteArray(integerBytes);
+}
+function parseServerMessage(encoded) {
+  switch (encoded.type) {
+    case "FatalError":
+    case "AuthError":
+    case "ActionResponse":
+    case "TransitionChunk":
+    case "Ping": {
+      return { ...encoded };
+    }
+    case "MutationResponse": {
+      if (encoded.success) {
+        return { ...encoded, ts: u64ToLong(encoded.ts) };
+      } else {
+        return { ...encoded };
+      }
+    }
+    case "Transition": {
+      return {
+        ...encoded,
+        startVersion: {
+          ...encoded.startVersion,
+          ts: u64ToLong(encoded.startVersion.ts)
+        },
+        endVersion: {
+          ...encoded.endVersion,
+          ts: u64ToLong(encoded.endVersion.ts)
+        }
+      };
+    }
+    default: {
+      encoded;
+    }
+  }
+  return void 0;
+}
+function encodeClientMessage(message) {
+  switch (message.type) {
+    case "Authenticate":
+    case "ModifyQuerySet":
+    case "Mutation":
+    case "Action":
+    case "Event": {
+      return { ...message };
+    }
+    case "Connect": {
+      if (message.maxObservedTimestamp !== void 0) {
+        return {
+          ...message,
+          maxObservedTimestamp: longToU64(message.maxObservedTimestamp)
+        };
+      } else {
+        return { ...message, maxObservedTimestamp: void 0 };
+      }
+    }
+    default: {
+      message;
+    }
+  }
+  return void 0;
+}
+
+// node_modules/convex/dist/esm/browser/sync/web_socket_manager.js
+var __defProp10 = Object.defineProperty;
+var __defNormalProp9 = (obj, key, value) => key in obj ? __defProp10(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField9 = (obj, key, value) => __defNormalProp9(obj, typeof key !== "symbol" ? key + "" : key, value);
+var CLOSE_NORMAL = 1e3;
+var CLOSE_GOING_AWAY = 1001;
+var CLOSE_NO_STATUS = 1005;
+var CLOSE_NOT_FOUND = 4040;
+var firstTime;
+function monotonicMillis() {
+  if (firstTime === void 0) {
+    firstTime = Date.now();
+  }
+  if (typeof performance === "undefined" || !performance.now) {
+    return Date.now();
+  }
+  return Math.round(firstTime + performance.now());
+}
+function prettyNow() {
+  return `t=${Math.round((monotonicMillis() - firstTime) / 100) / 10}s`;
+}
+var serverDisconnectErrors = {
+  // A known error, e.g. during a restart or push
+  InternalServerError: { timeout: 1e3 },
+  // ErrorMetadata::overloaded() messages that we realy should back off
+  SubscriptionsWorkerFullError: { timeout: 3e3 },
+  TooManyConcurrentRequests: { timeout: 3e3 },
+  CommitterFullError: { timeout: 3e3 },
+  AwsTooManyRequestsException: { timeout: 3e3 },
+  ExecuteFullError: { timeout: 3e3 },
+  SystemTimeoutError: { timeout: 3e3 },
+  ExpiredInQueue: { timeout: 3e3 },
+  // ErrorMetadata::feature_temporarily_unavailable() that typically indicate a deploy just happened
+  VectorIndexesUnavailable: { timeout: 1e3 },
+  SearchIndexesUnavailable: { timeout: 1e3 },
+  TableSummariesUnavailable: { timeout: 1e3 },
+  // More ErrorMetadata::overloaded()
+  VectorIndexTooLarge: { timeout: 3e3 },
+  SearchIndexTooLarge: { timeout: 3e3 },
+  TooManyWritesInTimePeriod: { timeout: 3e3 }
+};
+function classifyDisconnectError(s2) {
+  if (s2 === void 0) return "Unknown";
+  for (const prefix of Object.keys(
+    serverDisconnectErrors
+  )) {
+    if (s2.startsWith(prefix)) {
+      return prefix;
+    }
+  }
+  return "Unknown";
+}
+var WebSocketManager = class {
+  constructor(uri, callbacks, webSocketConstructor, logger, markConnectionStateDirty, debug) {
+    this.markConnectionStateDirty = markConnectionStateDirty;
+    this.debug = debug;
+    __publicField9(this, "socket");
+    __publicField9(this, "connectionCount");
+    __publicField9(this, "_hasEverConnected", false);
+    __publicField9(this, "lastCloseReason");
+    __publicField9(this, "transitionChunkBuffer", null);
+    __publicField9(this, "defaultInitialBackoff");
+    __publicField9(this, "maxBackoff");
+    __publicField9(this, "retries");
+    __publicField9(this, "serverInactivityThreshold");
+    __publicField9(this, "reconnectDueToServerInactivityTimeout");
+    __publicField9(this, "scheduledReconnect", null);
+    __publicField9(this, "networkOnlineHandler", null);
+    __publicField9(this, "pendingNetworkRecoveryInfo", null);
+    __publicField9(this, "uri");
+    __publicField9(this, "onOpen");
+    __publicField9(this, "onResume");
+    __publicField9(this, "onMessage");
+    __publicField9(this, "webSocketConstructor");
+    __publicField9(this, "logger");
+    __publicField9(this, "onServerDisconnectError");
+    this.webSocketConstructor = webSocketConstructor;
+    this.socket = { state: "disconnected" };
+    this.connectionCount = 0;
+    this.lastCloseReason = "InitialConnect";
+    this.defaultInitialBackoff = 1e3;
+    this.maxBackoff = 16e3;
+    this.retries = 0;
+    this.serverInactivityThreshold = 6e4;
+    this.reconnectDueToServerInactivityTimeout = null;
+    this.uri = uri;
+    this.onOpen = callbacks.onOpen;
+    this.onResume = callbacks.onResume;
+    this.onMessage = callbacks.onMessage;
+    this.onServerDisconnectError = callbacks.onServerDisconnectError;
+    this.logger = logger;
+    this.setupNetworkListener();
+    this.connect();
+  }
+  setSocketState(state2) {
+    this.socket = state2;
+    this._logVerbose(
+      `socket state changed: ${this.socket.state}, paused: ${"paused" in this.socket ? this.socket.paused : void 0}`
+    );
+    this.markConnectionStateDirty();
+  }
+  setupNetworkListener() {
+    if (typeof window === "undefined" || typeof window.addEventListener !== "function") {
+      return;
+    }
+    if (this.networkOnlineHandler !== null) {
+      return;
+    }
+    this.networkOnlineHandler = () => {
+      this._logVerbose("network online event detected");
+      this.tryReconnectImmediately();
+    };
+    window.addEventListener("online", this.networkOnlineHandler);
+    this._logVerbose("network online event listener registered");
+  }
+  cleanupNetworkListener() {
+    if (this.networkOnlineHandler && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+      window.removeEventListener("online", this.networkOnlineHandler);
+      this.networkOnlineHandler = null;
+      this._logVerbose("network online event listener removed");
+    }
+  }
+  assembleTransition(chunk) {
+    if (chunk.partNumber < 0 || chunk.partNumber >= chunk.totalParts || chunk.totalParts === 0 || this.transitionChunkBuffer && (this.transitionChunkBuffer.totalParts !== chunk.totalParts || this.transitionChunkBuffer.transitionId !== chunk.transitionId)) {
+      this.transitionChunkBuffer = null;
+      throw new Error("Invalid TransitionChunk");
+    }
+    if (this.transitionChunkBuffer === null) {
+      this.transitionChunkBuffer = {
+        chunks: [],
+        totalParts: chunk.totalParts,
+        transitionId: chunk.transitionId
+      };
+    }
+    if (chunk.partNumber !== this.transitionChunkBuffer.chunks.length) {
+      const expectedLength = this.transitionChunkBuffer.chunks.length;
+      this.transitionChunkBuffer = null;
+      throw new Error(
+        `TransitionChunk received out of order: expected part ${expectedLength}, got ${chunk.partNumber}`
+      );
+    }
+    this.transitionChunkBuffer.chunks.push(chunk.chunk);
+    if (this.transitionChunkBuffer.chunks.length === chunk.totalParts) {
+      const fullJson = this.transitionChunkBuffer.chunks.join("");
+      this.transitionChunkBuffer = null;
+      const transition = parseServerMessage(JSON.parse(fullJson));
+      if (transition.type !== "Transition") {
+        throw new Error(
+          `Expected Transition, got ${transition.type} after assembling chunks`
+        );
+      }
+      return transition;
+    }
+    return null;
+  }
+  connect() {
+    if (this.socket.state === "terminated") {
+      return;
+    }
+    if (this.socket.state !== "disconnected" && this.socket.state !== "stopped") {
+      throw new Error(
+        "Didn't start connection from disconnected state: " + this.socket.state
+      );
+    }
+    const ws = new this.webSocketConstructor(this.uri);
+    this._logVerbose("constructed WebSocket");
+    this.setSocketState({
+      state: "connecting",
+      ws,
+      paused: "no"
+    });
+    this.resetServerInactivityTimeout();
+    ws.onopen = () => {
+      this.logger.logVerbose("begin ws.onopen");
+      if (this.socket.state !== "connecting") {
+        throw new Error("onopen called with socket not in connecting state");
+      }
+      this.setSocketState({
+        state: "ready",
+        ws,
+        paused: this.socket.paused === "yes" ? "uninitialized" : "no"
+      });
+      this.resetServerInactivityTimeout();
+      if (this.socket.paused === "no") {
+        this._hasEverConnected = true;
+        this.onOpen({
+          connectionCount: this.connectionCount,
+          lastCloseReason: this.lastCloseReason,
+          clientTs: monotonicMillis()
+        });
+      }
+      if (this.lastCloseReason !== "InitialConnect") {
+        if (this.lastCloseReason) {
+          this.logger.log(
+            "WebSocket reconnected at",
+            prettyNow(),
+            "after disconnect due to",
+            this.lastCloseReason
+          );
+        } else {
+          this.logger.log("WebSocket reconnected at", prettyNow());
+        }
+      }
+      this.connectionCount += 1;
+      this.lastCloseReason = null;
+      if (this.pendingNetworkRecoveryInfo !== null) {
+        const { timeSavedMs } = this.pendingNetworkRecoveryInfo;
+        this.pendingNetworkRecoveryInfo = null;
+        this.sendMessage({
+          type: "Event",
+          eventType: "NetworkRecoveryReconnect",
+          event: { timeSavedMs }
+        });
+        this.logger.log(
+          `Network recovery reconnect saved ~${Math.round(timeSavedMs / 1e3)}s of waiting`
+        );
+      }
+    };
+    ws.onerror = (error) => {
+      this.transitionChunkBuffer = null;
+      const message = error.message;
+      if (message) {
+        this.logger.log(`WebSocket error message: ${message}`);
+      }
+    };
+    ws.onmessage = (message) => {
+      this.resetServerInactivityTimeout();
+      const messageLength = message.data.length;
+      let serverMessage = parseServerMessage(JSON.parse(message.data));
+      this._logVerbose(`received ws message with type ${serverMessage.type}`);
+      if (serverMessage.type === "Ping") {
+        return;
+      }
+      if (serverMessage.type === "TransitionChunk") {
+        const transition = this.assembleTransition(serverMessage);
+        if (!transition) {
+          return;
+        }
+        serverMessage = transition;
+        this._logVerbose(
+          `assembled full ws message of type ${serverMessage.type}`
+        );
+      }
+      if (this.transitionChunkBuffer !== null) {
+        this.transitionChunkBuffer = null;
+        this.logger.log(
+          `Received unexpected ${serverMessage.type} while buffering TransitionChunks`
+        );
+      }
+      if (serverMessage.type === "Transition") {
+        this.reportLargeTransition({
+          messageLength,
+          transition: serverMessage
+        });
+      }
+      const response = this.onMessage(serverMessage);
+      if (response.hasSyncedPastLastReconnect) {
+        this.retries = 0;
+        this.markConnectionStateDirty();
+      }
+    };
+    ws.onclose = (event) => {
+      this._logVerbose("begin ws.onclose");
+      this.transitionChunkBuffer = null;
+      if (this.lastCloseReason === null) {
+        this.lastCloseReason = event.reason || `closed with code ${event.code}`;
+      }
+      if (event.code !== CLOSE_NORMAL && event.code !== CLOSE_GOING_AWAY && // This commonly gets fired on mobile apps when the app is backgrounded
+      event.code !== CLOSE_NO_STATUS && event.code !== CLOSE_NOT_FOUND) {
+        let msg = `WebSocket closed with code ${event.code}`;
+        if (event.reason) {
+          msg += `: ${event.reason}`;
+        }
+        this.logger.log(msg);
+        if (this.onServerDisconnectError && event.reason) {
+          this.onServerDisconnectError(msg);
+        }
+      }
+      const reason = classifyDisconnectError(event.reason);
+      this.scheduleReconnect(reason);
+      return;
+    };
+  }
+  /**
+   * @returns The state of the {@link Socket}.
+   */
+  socketState() {
+    return this.socket.state;
+  }
+  /**
+   * @param message - A ClientMessage to send.
+   * @returns Whether the message (might have been) sent.
+   */
+  sendMessage(message) {
+    const messageForLog = {
+      type: message.type,
+      ...message.type === "Authenticate" && message.tokenType === "User" ? {
+        value: `...${message.value.slice(-7)}`
+      } : {}
+    };
+    if (this.socket.state === "ready" && this.socket.paused === "no") {
+      const encodedMessage = encodeClientMessage(message);
+      const request = JSON.stringify(encodedMessage);
+      let sent = false;
+      try {
+        this.socket.ws.send(request);
+        sent = true;
+      } catch (error) {
+        this.logger.log(
+          `Failed to send message on WebSocket, reconnecting: ${error}`
+        );
+        this.closeAndReconnect("FailedToSendMessage");
+      }
+      this._logVerbose(
+        `${sent ? "sent" : "failed to send"} message with type ${message.type}: ${JSON.stringify(
+          messageForLog
+        )}`
+      );
+      return true;
+    }
+    this._logVerbose(
+      `message not sent (socket state: ${this.socket.state}, paused: ${"paused" in this.socket ? this.socket.paused : void 0}): ${JSON.stringify(
+        messageForLog
+      )}`
+    );
+    return false;
+  }
+  resetServerInactivityTimeout() {
+    if (this.socket.state === "terminated") {
+      return;
+    }
+    if (this.reconnectDueToServerInactivityTimeout !== null) {
+      clearTimeout(this.reconnectDueToServerInactivityTimeout);
+      this.reconnectDueToServerInactivityTimeout = null;
+    }
+    this.reconnectDueToServerInactivityTimeout = setTimeout(() => {
+      this.closeAndReconnect("InactiveServer");
+    }, this.serverInactivityThreshold);
+  }
+  scheduleReconnect(reason) {
+    if (this.scheduledReconnect) {
+      clearTimeout(this.scheduledReconnect.timeout);
+      this.scheduledReconnect = null;
+    }
+    this.socket = { state: "disconnected" };
+    const backoff = this.nextBackoff(reason);
+    this.markConnectionStateDirty();
+    this.logger.log(`Attempting reconnect in ${Math.round(backoff)}ms`);
+    const scheduledAt = monotonicMillis();
+    const timeoutId = setTimeout(() => {
+      if (this.scheduledReconnect?.timeout === timeoutId) {
+        this.scheduledReconnect = null;
+        this.connect();
+      }
+    }, backoff);
+    this.scheduledReconnect = {
+      timeout: timeoutId,
+      scheduledAt,
+      backoffMs: backoff
+    };
+  }
+  /**
+   * Close the WebSocket and schedule a reconnect.
+   *
+   * This should be used when we hit an error and would like to restart the session.
+   */
+  closeAndReconnect(closeReason) {
+    this._logVerbose(`begin closeAndReconnect with reason ${closeReason}`);
+    switch (this.socket.state) {
+      case "disconnected":
+      case "terminated":
+      case "stopped":
+        return;
+      case "connecting":
+      case "ready": {
+        this.lastCloseReason = closeReason;
+        void this.close();
+        this.scheduleReconnect("client");
+        return;
+      }
+      default: {
+        this.socket;
+      }
+    }
+  }
+  /**
+   * Close the WebSocket, being careful to clear the onclose handler to avoid re-entrant
+   * calls. Use this instead of directly calling `ws.close()`
+   *
+   * It is the callers responsibility to update the state after this method is called so that the
+   * closed socket is not accessible or used again after this method is called
+   */
+  close() {
+    this.transitionChunkBuffer = null;
+    switch (this.socket.state) {
+      case "disconnected":
+      case "terminated":
+      case "stopped":
+        return Promise.resolve();
+      case "connecting": {
+        const ws = this.socket.ws;
+        ws.onmessage = (_message) => {
+          this._logVerbose("Ignoring message received after close");
+        };
+        return new Promise((r2) => {
+          ws.onclose = () => {
+            this._logVerbose("Closed after connecting");
+            r2();
+          };
+          ws.onopen = () => {
+            this._logVerbose("Opened after connecting");
+            ws.close();
+          };
+        });
+      }
+      case "ready": {
+        this._logVerbose("ws.close called");
+        const ws = this.socket.ws;
+        ws.onmessage = (_message) => {
+          this._logVerbose("Ignoring message received after close");
+        };
+        const result = new Promise((r2) => {
+          ws.onclose = () => {
+            r2();
+          };
+        });
+        ws.close();
+        return result;
+      }
+      default: {
+        this.socket;
+        return Promise.resolve();
+      }
+    }
+  }
+  /**
+   * Close the WebSocket and do not reconnect.
+   * @returns A Promise that resolves when the WebSocket `onClose` callback is called.
+   */
+  terminate() {
+    if (this.reconnectDueToServerInactivityTimeout) {
+      clearTimeout(this.reconnectDueToServerInactivityTimeout);
+    }
+    if (this.scheduledReconnect) {
+      clearTimeout(this.scheduledReconnect.timeout);
+      this.scheduledReconnect = null;
+    }
+    this.cleanupNetworkListener();
+    switch (this.socket.state) {
+      case "terminated":
+      case "stopped":
+      case "disconnected":
+      case "connecting":
+      case "ready": {
+        const result = this.close();
+        this.setSocketState({ state: "terminated" });
+        return result;
+      }
+      default: {
+        this.socket;
+        throw new Error(
+          `Invalid websocket state: ${this.socket.state}`
+        );
+      }
+    }
+  }
+  stop() {
+    switch (this.socket.state) {
+      case "terminated":
+        return Promise.resolve();
+      case "connecting":
+      case "stopped":
+      case "disconnected":
+      case "ready": {
+        this.cleanupNetworkListener();
+        const result = this.close();
+        this.socket = { state: "stopped" };
+        return result;
+      }
+      default: {
+        this.socket;
+        return Promise.resolve();
+      }
+    }
+  }
+  /**
+   * Create a new WebSocket after a previous `stop()`, unless `terminate()` was
+   * called before.
+   */
+  tryRestart() {
+    switch (this.socket.state) {
+      case "stopped":
+        break;
+      case "terminated":
+      case "connecting":
+      case "ready":
+      case "disconnected":
+        this.logger.logVerbose("Restart called without stopping first");
+        return;
+      default: {
+        this.socket;
+      }
+    }
+    this.setupNetworkListener();
+    this.connect();
+  }
+  pause() {
+    switch (this.socket.state) {
+      case "disconnected":
+      case "stopped":
+      case "terminated":
+        return;
+      case "connecting":
+      case "ready": {
+        this.socket = { ...this.socket, paused: "yes" };
+        return;
+      }
+      default: {
+        this.socket;
+        return;
+      }
+    }
+  }
+  /**
+   * Try to reconnect immediately, canceling any scheduled reconnect.
+   * This is useful when detecting network recovery.
+   * Only takes action if we're in disconnected state (waiting to reconnect).
+   */
+  tryReconnectImmediately() {
+    this._logVerbose("tryReconnectImmediately called");
+    if (this.socket.state !== "disconnected") {
+      this._logVerbose(
+        `tryReconnectImmediately called but socket state is ${this.socket.state}, no action taken`
+      );
+      return;
+    }
+    let timeSavedMs = null;
+    if (this.scheduledReconnect) {
+      const elapsed = monotonicMillis() - this.scheduledReconnect.scheduledAt;
+      timeSavedMs = Math.max(0, this.scheduledReconnect.backoffMs - elapsed);
+      this._logVerbose(
+        `would have waited ${Math.round(timeSavedMs)}ms more (backoff was ${Math.round(this.scheduledReconnect.backoffMs)}ms, elapsed ${Math.round(elapsed)}ms)`
+      );
+      clearTimeout(this.scheduledReconnect.timeout);
+      this.scheduledReconnect = null;
+      this._logVerbose("canceled scheduled reconnect");
+    }
+    this.logger.log("Network recovery detected, reconnecting immediately");
+    this.pendingNetworkRecoveryInfo = timeSavedMs !== null ? { timeSavedMs } : null;
+    this.connect();
+  }
+  /**
+   * Resume the state machine if previously paused.
+   */
+  resume() {
+    switch (this.socket.state) {
+      case "connecting":
+        this.socket = { ...this.socket, paused: "no" };
+        return;
+      case "ready":
+        if (this.socket.paused === "uninitialized") {
+          this.socket = { ...this.socket, paused: "no" };
+          this.onOpen({
+            connectionCount: this.connectionCount,
+            lastCloseReason: this.lastCloseReason,
+            clientTs: monotonicMillis()
+          });
+        } else if (this.socket.paused === "yes") {
+          this.socket = { ...this.socket, paused: "no" };
+          this.onResume();
+        }
+        return;
+      case "terminated":
+      case "stopped":
+      case "disconnected":
+        return;
+      default: {
+        this.socket;
+      }
+    }
+    this.connect();
+  }
+  connectionState() {
+    return {
+      isConnected: this.socket.state === "ready",
+      hasEverConnected: this._hasEverConnected,
+      connectionCount: this.connectionCount,
+      connectionRetries: this.retries
+    };
+  }
+  _logVerbose(message) {
+    this.logger.logVerbose(message);
+  }
+  nextBackoff(reason) {
+    const initialBackoff = reason === "client" ? 100 : reason === "Unknown" ? this.defaultInitialBackoff : serverDisconnectErrors[reason].timeout;
+    const baseBackoff = initialBackoff * Math.pow(2, this.retries);
+    this.retries += 1;
+    const actualBackoff = Math.min(baseBackoff, this.maxBackoff);
+    const jitter = actualBackoff * (Math.random() - 0.5);
+    return actualBackoff + jitter;
+  }
+  reportLargeTransition({
+    transition,
+    messageLength
+  }) {
+    if (transition.clientClockSkew === void 0 || transition.serverTs === void 0) {
+      return;
+    }
+    const transitionTransitTime = monotonicMillis() - // client time now
+    // clientClockSkew = (server time + upstream latency) - client time
+    // clientClockSkew is "how many milliseconds behind (slow) is the client clock"
+    // but the latency of the Connect message inflates this, making it appear further behind
+    transition.clientClockSkew - transition.serverTs / 1e6;
+    const prettyTransitionTime = `${Math.round(transitionTransitTime)}ms`;
+    const prettyMessageMB = `${Math.round(messageLength / 1e4) / 100}MB`;
+    const bytesPerSecond = messageLength / (transitionTransitTime / 1e3);
+    const prettyBytesPerSecond = `${Math.round(bytesPerSecond / 1e4) / 100}MB per second`;
+    this._logVerbose(
+      `received ${prettyMessageMB} transition in ${prettyTransitionTime} at ${prettyBytesPerSecond}`
+    );
+    if (messageLength > 2e7) {
+      this.logger.log(
+        `received query results totaling more that 20MB (${prettyMessageMB}) which will take a long time to download on slower connections`
+      );
+    } else if (transitionTransitTime > 2e4) {
+      this.logger.log(
+        `received query results totaling ${prettyMessageMB} which took more than 20s to arrive (${prettyTransitionTime})`
+      );
+    }
+    if (this.debug) {
+      this.sendMessage({
+        type: "Event",
+        eventType: "ClientReceivedTransition",
+        event: { transitionTransitTime, messageLength }
+      });
+    }
+  }
+};
+
+// node_modules/convex/dist/esm/browser/sync/session.js
+function newSessionId() {
+  return uuidv4();
+}
+function uuidv4() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c2) => {
+    const r2 = Math.random() * 16 | 0, v3 = c2 === "x" ? r2 : r2 & 3 | 8;
+    return v3.toString(16);
+  });
+}
+
 // node_modules/convex/dist/esm/vendor/jwt-decode/index.js
 var InvalidTokenError = class extends Error {
 };
 InvalidTokenError.prototype.name = "InvalidTokenError";
+function b64DecodeUnicode(str) {
+  return decodeURIComponent(
+    atob(str).replace(/(.)/g, (_m, p2) => {
+      let code2 = p2.charCodeAt(0).toString(16).toUpperCase();
+      if (code2.length < 2) {
+        code2 = "0" + code2;
+      }
+      return "%" + code2;
+    })
+  );
+}
+function base64UrlDecode(str) {
+  let output = str.replace(/-/g, "+").replace(/_/g, "/");
+  switch (output.length % 4) {
+    case 0:
+      break;
+    case 2:
+      output += "==";
+      break;
+    case 3:
+      output += "=";
+      break;
+    default:
+      throw new Error("base64 string is not of the correct length");
+  }
+  try {
+    return b64DecodeUnicode(output);
+  } catch {
+    return atob(output);
+  }
+}
+function jwtDecode(token, options) {
+  if (typeof token !== "string") {
+    throw new InvalidTokenError("Invalid token specified: must be a string");
+  }
+  options || (options = {});
+  const pos = options.header === true ? 0 : 1;
+  const part = token.split(".")[pos];
+  if (typeof part !== "string") {
+    throw new InvalidTokenError(
+      `Invalid token specified: missing part #${pos + 1}`
+    );
+  }
+  let decoded;
+  try {
+    decoded = base64UrlDecode(part);
+  } catch (e3) {
+    throw new InvalidTokenError(
+      `Invalid token specified: invalid base64 for part #${pos + 1} (${e3.message})`
+    );
+  }
+  try {
+    return JSON.parse(decoded);
+  } catch (e3) {
+    throw new InvalidTokenError(
+      `Invalid token specified: invalid json for part #${pos + 1} (${e3.message})`
+    );
+  }
+}
 
 // node_modules/convex/dist/esm/browser/sync/authentication_manager.js
+var __defProp11 = Object.defineProperty;
+var __defNormalProp10 = (obj, key, value) => key in obj ? __defProp11(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField10 = (obj, key, value) => __defNormalProp10(obj, typeof key !== "symbol" ? key + "" : key, value);
 var MAXIMUM_REFRESH_DELAY = 20 * 24 * 60 * 60 * 1e3;
-
-// node_modules/convex/dist/esm/browser/http_client.js
-var __defProp5 = Object.defineProperty;
-var __defNormalProp5 = (obj, key, value) => key in obj ? __defProp5(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField5 = (obj, key, value) => __defNormalProp5(obj, typeof key !== "symbol" ? key + "" : key, value);
-var STATUS_CODE_UDF_FAILED = 560;
-var specifiedFetch = void 0;
-var ConvexHttpClient = class {
-  /**
-   * Create a new {@link ConvexHttpClient}.
-   *
-   * @param address - The url of your Convex deployment, often provided
-   * by an environment variable. E.g. `https://small-mouse-123.convex.cloud`.
-   * @param options - An object of options.
-   * - `skipConvexDeploymentUrlCheck` - Skip validating that the Convex deployment URL looks like
-   * `https://happy-animal-123.convex.cloud` or localhost. This can be useful if running a self-hosted
-   * Convex backend that uses a different URL.
-   * - `logger` - A logger or a boolean. If not provided, logs to the console.
-   * You can construct your own logger to customize logging to log elsewhere
-   * or not log at all, or use `false` as a shorthand for a no-op logger.
-   * A logger is an object with 4 methods: log(), warn(), error(), and logVerbose().
-   * These methods can receive multiple arguments of any types, like console.log().
-   * - `auth` - A JWT containing identity claims accessible in Convex functions.
-   * This identity may expire so it may be necessary to call `setAuth()` later,
-   * but for short-lived clients it's convenient to specify this value here.
-   * - `fetch` - A custom fetch implementation to use for all HTTP requests made by this client.
-   */
-  constructor(address, options) {
-    __publicField5(this, "address");
-    __publicField5(this, "auth");
-    __publicField5(this, "adminAuth");
-    __publicField5(this, "encodedTsPromise");
-    __publicField5(this, "debug");
-    __publicField5(this, "fetchOptions");
-    __publicField5(this, "fetch");
-    __publicField5(this, "logger");
-    __publicField5(this, "mutationQueue", []);
-    __publicField5(this, "isProcessingQueue", false);
-    if (typeof options === "boolean") {
-      throw new Error(
-        "skipConvexDeploymentUrlCheck as the second argument is no longer supported. Please pass an options object, `{ skipConvexDeploymentUrlCheck: true }`."
+var MAX_TOKEN_CONFIRMATION_ATTEMPTS = 2;
+var AuthenticationManager = class {
+  constructor(syncState, callbacks, config) {
+    __publicField10(this, "authState", { state: "noAuth" });
+    __publicField10(this, "configVersion", 0);
+    __publicField10(this, "syncState");
+    __publicField10(this, "authenticate");
+    __publicField10(this, "stopSocket");
+    __publicField10(this, "tryRestartSocket");
+    __publicField10(this, "pauseSocket");
+    __publicField10(this, "resumeSocket");
+    __publicField10(this, "clearAuth");
+    __publicField10(this, "logger");
+    __publicField10(this, "refreshTokenLeewaySeconds");
+    __publicField10(this, "tokenConfirmationAttempts", 0);
+    this.syncState = syncState;
+    this.authenticate = callbacks.authenticate;
+    this.stopSocket = callbacks.stopSocket;
+    this.tryRestartSocket = callbacks.tryRestartSocket;
+    this.pauseSocket = callbacks.pauseSocket;
+    this.resumeSocket = callbacks.resumeSocket;
+    this.clearAuth = callbacks.clearAuth;
+    this.logger = config.logger;
+    this.refreshTokenLeewaySeconds = config.refreshTokenLeewaySeconds;
+  }
+  async setConfig(fetchToken, onChange) {
+    this.resetAuthState();
+    this._logVerbose("pausing WS for auth token fetch");
+    this.pauseSocket();
+    const token = await this.fetchTokenAndGuardAgainstRace(fetchToken, {
+      forceRefreshToken: false
+    });
+    if (token.isFromOutdatedConfig) {
+      return;
+    }
+    if (token.value) {
+      this.setAuthState({
+        state: "waitingForServerConfirmationOfCachedToken",
+        config: { fetchToken, onAuthChange: onChange },
+        hasRetried: false
+      });
+      this.authenticate(token.value);
+    } else {
+      this.setAuthState({
+        state: "initialRefetch",
+        config: { fetchToken, onAuthChange: onChange }
+      });
+      await this.refetchToken();
+    }
+    this._logVerbose("resuming WS after auth token fetch");
+    this.resumeSocket();
+  }
+  onTransition(serverMessage) {
+    if (!this.syncState.isCurrentOrNewerAuthVersion(
+      serverMessage.endVersion.identity
+    )) {
+      return;
+    }
+    if (serverMessage.endVersion.identity <= serverMessage.startVersion.identity) {
+      return;
+    }
+    if (this.authState.state === "waitingForServerConfirmationOfCachedToken") {
+      this._logVerbose("server confirmed auth token is valid");
+      void this.refetchToken();
+      this.authState.config.onAuthChange(true);
+      return;
+    }
+    if (this.authState.state === "waitingForServerConfirmationOfFreshToken") {
+      this._logVerbose("server confirmed new auth token is valid");
+      this.scheduleTokenRefetch(this.authState.token);
+      this.tokenConfirmationAttempts = 0;
+      if (!this.authState.hadAuth) {
+        this.authState.config.onAuthChange(true);
+      }
+    }
+  }
+  onAuthError(serverMessage) {
+    if (serverMessage.authUpdateAttempted === false && (this.authState.state === "waitingForServerConfirmationOfFreshToken" || this.authState.state === "waitingForServerConfirmationOfCachedToken")) {
+      this._logVerbose("ignoring non-auth token expired error");
+      return;
+    }
+    const { baseVersion } = serverMessage;
+    if (!this.syncState.isCurrentOrNewerAuthVersion(baseVersion + 1)) {
+      this._logVerbose("ignoring auth error for previous auth attempt");
+      return;
+    }
+    void this.tryToReauthenticate(serverMessage);
+    return;
+  }
+  // This is similar to `refetchToken` defined below, in fact we
+  // don't represent them as different states, but it is different
+  // in that we pause the WebSocket so that mutations
+  // don't retry with bad auth.
+  async tryToReauthenticate(serverMessage) {
+    this._logVerbose(`attempting to reauthenticate: ${serverMessage.error}`);
+    if (
+      // No way to fetch another token, kaboom
+      this.authState.state === "noAuth" || // We failed on a fresh token. After a small number of retries, we give up
+      // and clear the auth state to avoid infinite retries.
+      this.authState.state === "waitingForServerConfirmationOfFreshToken" && this.tokenConfirmationAttempts >= MAX_TOKEN_CONFIRMATION_ATTEMPTS
+    ) {
+      this.logger.error(
+        `Failed to authenticate: "${serverMessage.error}", check your server auth config`
+      );
+      if (this.syncState.hasAuth()) {
+        this.syncState.clearAuth();
+      }
+      if (this.authState.state !== "noAuth") {
+        this.setAndReportAuthFailed(this.authState.config.onAuthChange);
+      }
+      return;
+    }
+    if (this.authState.state === "waitingForServerConfirmationOfFreshToken") {
+      this.tokenConfirmationAttempts++;
+      this._logVerbose(
+        `retrying reauthentication, ${MAX_TOKEN_CONFIRMATION_ATTEMPTS - this.tokenConfirmationAttempts} attempts remaining`
       );
     }
-    const opts = options ?? {};
-    if (opts.skipConvexDeploymentUrlCheck !== true) {
+    await this.stopSocket();
+    const token = await this.fetchTokenAndGuardAgainstRace(
+      this.authState.config.fetchToken,
+      {
+        forceRefreshToken: true
+      }
+    );
+    if (token.isFromOutdatedConfig) {
+      return;
+    }
+    if (token.value && this.syncState.isNewAuth(token.value)) {
+      this.authenticate(token.value);
+      this.setAuthState({
+        state: "waitingForServerConfirmationOfFreshToken",
+        config: this.authState.config,
+        token: token.value,
+        hadAuth: this.authState.state === "notRefetching" || this.authState.state === "waitingForScheduledRefetch"
+      });
+    } else {
+      this._logVerbose("reauthentication failed, could not fetch a new token");
+      if (this.syncState.hasAuth()) {
+        this.syncState.clearAuth();
+      }
+      this.setAndReportAuthFailed(this.authState.config.onAuthChange);
+    }
+    this.tryRestartSocket();
+  }
+  // Force refetch the token and schedule another refetch
+  // before the token expires - an active client should never
+  // need to reauthenticate.
+  async refetchToken() {
+    if (this.authState.state === "noAuth") {
+      return;
+    }
+    this._logVerbose("refetching auth token");
+    const token = await this.fetchTokenAndGuardAgainstRace(
+      this.authState.config.fetchToken,
+      {
+        forceRefreshToken: true
+      }
+    );
+    if (token.isFromOutdatedConfig) {
+      return;
+    }
+    if (token.value) {
+      if (this.syncState.isNewAuth(token.value)) {
+        this.setAuthState({
+          state: "waitingForServerConfirmationOfFreshToken",
+          hadAuth: this.syncState.hasAuth(),
+          token: token.value,
+          config: this.authState.config
+        });
+        this.authenticate(token.value);
+      } else {
+        this.setAuthState({
+          state: "notRefetching",
+          config: this.authState.config
+        });
+      }
+    } else {
+      this._logVerbose("refetching token failed");
+      if (this.syncState.hasAuth()) {
+        this.clearAuth();
+      }
+      this.setAndReportAuthFailed(this.authState.config.onAuthChange);
+    }
+    this._logVerbose(
+      "restarting WS after auth token fetch (if currently stopped)"
+    );
+    this.tryRestartSocket();
+  }
+  scheduleTokenRefetch(token) {
+    if (this.authState.state === "noAuth") {
+      return;
+    }
+    const decodedToken = this.decodeToken(token);
+    if (!decodedToken) {
+      this.logger.error(
+        "Auth token is not a valid JWT, cannot refetch the token"
+      );
+      return;
+    }
+    const { iat, exp } = decodedToken;
+    if (!iat || !exp) {
+      this.logger.error(
+        "Auth token does not have required fields, cannot refetch the token"
+      );
+      return;
+    }
+    const tokenValiditySeconds = exp - iat;
+    if (tokenValiditySeconds <= 2) {
+      this.logger.error(
+        "Auth token does not live long enough, cannot refetch the token"
+      );
+      return;
+    }
+    let delay = Math.min(
+      MAXIMUM_REFRESH_DELAY,
+      (tokenValiditySeconds - this.refreshTokenLeewaySeconds) * 1e3
+    );
+    if (delay <= 0) {
+      this.logger.warn(
+        `Refetching auth token immediately, configured leeway ${this.refreshTokenLeewaySeconds}s is larger than the token's lifetime ${tokenValiditySeconds}s`
+      );
+      delay = 0;
+    }
+    const refetchTokenTimeoutId = setTimeout(() => {
+      this._logVerbose("running scheduled token refetch");
+      void this.refetchToken();
+    }, delay);
+    this.setAuthState({
+      state: "waitingForScheduledRefetch",
+      refetchTokenTimeoutId,
+      config: this.authState.config
+    });
+    this._logVerbose(
+      `scheduled preemptive auth token refetching in ${delay}ms`
+    );
+  }
+  // Protects against simultaneous calls to `setConfig`
+  // while we're fetching a token
+  async fetchTokenAndGuardAgainstRace(fetchToken, fetchArgs) {
+    const originalConfigVersion = ++this.configVersion;
+    this._logVerbose(
+      `fetching token with config version ${originalConfigVersion}`
+    );
+    const token = await fetchToken(fetchArgs);
+    if (this.configVersion !== originalConfigVersion) {
+      this._logVerbose(
+        `stale config version, expected ${originalConfigVersion}, got ${this.configVersion}`
+      );
+      return { isFromOutdatedConfig: true };
+    }
+    return { isFromOutdatedConfig: false, value: token };
+  }
+  stop() {
+    this.resetAuthState();
+    this.configVersion++;
+    this._logVerbose(`config version bumped to ${this.configVersion}`);
+  }
+  setAndReportAuthFailed(onAuthChange) {
+    onAuthChange(false);
+    this.resetAuthState();
+  }
+  resetAuthState() {
+    this.setAuthState({ state: "noAuth" });
+  }
+  setAuthState(newAuth) {
+    const authStateForLog = newAuth.state === "waitingForServerConfirmationOfFreshToken" ? {
+      hadAuth: newAuth.hadAuth,
+      state: newAuth.state,
+      token: `...${newAuth.token.slice(-7)}`
+    } : { state: newAuth.state };
+    this._logVerbose(
+      `setting auth state to ${JSON.stringify(authStateForLog)}`
+    );
+    switch (newAuth.state) {
+      case "waitingForScheduledRefetch":
+      case "notRefetching":
+      case "noAuth":
+        this.tokenConfirmationAttempts = 0;
+        break;
+      case "waitingForServerConfirmationOfFreshToken":
+      case "waitingForServerConfirmationOfCachedToken":
+      case "initialRefetch":
+        break;
+      default: {
+        newAuth;
+      }
+    }
+    if (this.authState.state === "waitingForScheduledRefetch") {
+      clearTimeout(this.authState.refetchTokenTimeoutId);
+      this.syncState.markAuthCompletion();
+    }
+    this.authState = newAuth;
+  }
+  decodeToken(token) {
+    try {
+      return jwtDecode(token);
+    } catch (e3) {
+      this._logVerbose(
+        `Error decoding token: ${e3 instanceof Error ? e3.message : "Unknown error"}`
+      );
+      return null;
+    }
+  }
+  _logVerbose(message) {
+    this.logger.logVerbose(`${message} [v${this.configVersion}]`);
+  }
+};
+
+// node_modules/convex/dist/esm/browser/sync/metrics.js
+var markNames = [
+  "convexClientConstructed",
+  "convexWebSocketOpen",
+  "convexFirstMessageReceived"
+];
+function mark(name, sessionId) {
+  const detail = { sessionId };
+  if (typeof performance === "undefined" || !performance.mark) return;
+  performance.mark(name, { detail });
+}
+function performanceMarkToJson(mark2) {
+  let name = mark2.name.slice("convex".length);
+  name = name.charAt(0).toLowerCase() + name.slice(1);
+  return {
+    name,
+    startTime: mark2.startTime
+  };
+}
+function getMarksReport(sessionId) {
+  if (typeof performance === "undefined" || !performance.getEntriesByName) {
+    return [];
+  }
+  const allMarks = [];
+  for (const name of markNames) {
+    const marks = performance.getEntriesByName(name).filter((entry) => entry.entryType === "mark").filter((mark2) => mark2.detail.sessionId === sessionId);
+    allMarks.push(...marks);
+  }
+  return allMarks.map(performanceMarkToJson);
+}
+
+// node_modules/convex/dist/esm/browser/sync/client.js
+var __defProp12 = Object.defineProperty;
+var __defNormalProp11 = (obj, key, value) => key in obj ? __defProp12(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField11 = (obj, key, value) => __defNormalProp11(obj, typeof key !== "symbol" ? key + "" : key, value);
+var BaseConvexClient = class {
+  /**
+   * @param address - The url of your Convex deployment, often provided
+   * by an environment variable. E.g. `https://small-mouse-123.convex.cloud`.
+   * @param onTransition - A callback receiving an array of query tokens
+   * corresponding to query results that have changed -- additional handlers
+   * can be added via `addOnTransitionHandler`.
+   * @param options - See {@link BaseConvexClientOptions} for a full description.
+   */
+  constructor(address, onTransition, options) {
+    __publicField11(this, "address");
+    __publicField11(this, "state");
+    __publicField11(this, "requestManager");
+    __publicField11(this, "webSocketManager");
+    __publicField11(this, "authenticationManager");
+    __publicField11(this, "remoteQuerySet");
+    __publicField11(this, "optimisticQueryResults");
+    __publicField11(this, "_transitionHandlerCounter", 0);
+    __publicField11(this, "_nextRequestId");
+    __publicField11(this, "_onTransitionFns", /* @__PURE__ */ new Map());
+    __publicField11(this, "_sessionId");
+    __publicField11(this, "firstMessageReceived", false);
+    __publicField11(this, "debug");
+    __publicField11(this, "logger");
+    __publicField11(this, "maxObservedTimestamp");
+    __publicField11(this, "connectionStateSubscribers", /* @__PURE__ */ new Map());
+    __publicField11(this, "nextConnectionStateSubscriberId", 0);
+    __publicField11(this, "_lastPublishedConnectionState");
+    __publicField11(this, "markConnectionStateDirty", () => {
+      void Promise.resolve().then(() => {
+        const curConnectionState = this.connectionState();
+        if (JSON.stringify(curConnectionState) !== JSON.stringify(this._lastPublishedConnectionState)) {
+          this._lastPublishedConnectionState = curConnectionState;
+          for (const cb of this.connectionStateSubscribers.values()) {
+            cb(curConnectionState);
+          }
+        }
+      });
+    });
+    __publicField11(this, "mark", (name) => {
+      if (this.debug) {
+        mark(name, this.sessionId);
+      }
+    });
+    if (typeof address === "object") {
+      throw new Error(
+        "Passing a ClientConfig object is no longer supported. Pass the URL of the Convex deployment as a string directly."
+      );
+    }
+    if (options?.skipConvexDeploymentUrlCheck !== true) {
       validateDeploymentUrl(address);
     }
-    this.logger = options?.logger === false ? instantiateNoopLogger({ verbose: false }) : options?.logger !== true && options?.logger ? options.logger : instantiateDefaultLogger({ verbose: false });
+    options = { ...options };
+    const authRefreshTokenLeewaySeconds = options.authRefreshTokenLeewaySeconds ?? 10;
+    let webSocketConstructor = options.webSocketConstructor;
+    if (!webSocketConstructor && typeof WebSocket === "undefined") {
+      throw new Error(
+        "No WebSocket global variable defined! To use Convex in an environment without WebSocket try the HTTP client: https://docs.convex.dev/api/classes/browser.ConvexHttpClient"
+      );
+    }
+    webSocketConstructor = webSocketConstructor || WebSocket;
+    this.debug = options.reportDebugInfoToConvex ?? false;
     this.address = address;
-    this.debug = true;
-    this.auth = void 0;
-    this.adminAuth = void 0;
-    this.fetch = options?.fetch;
-    if (options?.auth) {
-      this.setAuth(options.auth);
+    this.logger = options.logger === false ? instantiateNoopLogger({ verbose: options.verbose ?? false }) : options.logger !== true && options.logger ? options.logger : instantiateDefaultLogger({ verbose: options.verbose ?? false });
+    const i2 = address.search("://");
+    if (i2 === -1) {
+      throw new Error("Provided address was not an absolute URL.");
+    }
+    const origin = address.substring(i2 + 3);
+    const protocol = address.substring(0, i2);
+    let wsProtocol;
+    if (protocol === "http") {
+      wsProtocol = "ws";
+    } else if (protocol === "https") {
+      wsProtocol = "wss";
+    } else {
+      throw new Error(`Unknown parent protocol ${protocol}`);
+    }
+    const wsUri = `${wsProtocol}://${origin}/api/${version}/sync`;
+    this.state = new LocalSyncState();
+    this.remoteQuerySet = new RemoteQuerySet(
+      (queryId) => this.state.queryPath(queryId),
+      this.logger
+    );
+    this.requestManager = new RequestManager(
+      this.logger,
+      this.markConnectionStateDirty
+    );
+    const pauseSocket = () => {
+      this.webSocketManager.pause();
+      this.state.pause();
+    };
+    this.authenticationManager = new AuthenticationManager(
+      this.state,
+      {
+        authenticate: (token) => {
+          const message = this.state.setAuth(token);
+          this.webSocketManager.sendMessage(message);
+          return message.baseVersion;
+        },
+        stopSocket: () => this.webSocketManager.stop(),
+        tryRestartSocket: () => this.webSocketManager.tryRestart(),
+        pauseSocket,
+        resumeSocket: () => this.webSocketManager.resume(),
+        clearAuth: () => {
+          this.clearAuth();
+        }
+      },
+      {
+        logger: this.logger,
+        refreshTokenLeewaySeconds: authRefreshTokenLeewaySeconds
+      }
+    );
+    this.optimisticQueryResults = new OptimisticQueryResults();
+    this.addOnTransitionHandler((transition) => {
+      onTransition(transition.queries.map((q2) => q2.token));
+    });
+    this._nextRequestId = 0;
+    this._sessionId = newSessionId();
+    const { unsavedChangesWarning } = options;
+    if (typeof window === "undefined" || typeof window.addEventListener === "undefined") {
+      if (unsavedChangesWarning === true) {
+        throw new Error(
+          "unsavedChangesWarning requested, but window.addEventListener not found! Remove {unsavedChangesWarning: true} from Convex client options."
+        );
+      }
+    } else if (unsavedChangesWarning !== false) {
+      window.addEventListener("beforeunload", (e3) => {
+        if (this.requestManager.hasIncompleteRequests()) {
+          e3.preventDefault();
+          const confirmationMessage = "Are you sure you want to leave? Your changes may not be saved.";
+          (e3 || window.event).returnValue = confirmationMessage;
+          return confirmationMessage;
+        }
+      });
+    }
+    this.webSocketManager = new WebSocketManager(
+      wsUri,
+      {
+        onOpen: (reconnectMetadata) => {
+          this.mark("convexWebSocketOpen");
+          this.webSocketManager.sendMessage({
+            ...reconnectMetadata,
+            type: "Connect",
+            sessionId: this._sessionId,
+            maxObservedTimestamp: this.maxObservedTimestamp
+          });
+          const oldRemoteQueryResults = new Set(
+            this.remoteQuerySet.remoteQueryResults().keys()
+          );
+          this.remoteQuerySet = new RemoteQuerySet(
+            (queryId) => this.state.queryPath(queryId),
+            this.logger
+          );
+          const [querySetModification, authModification] = this.state.restart(
+            oldRemoteQueryResults
+          );
+          if (authModification) {
+            this.webSocketManager.sendMessage(authModification);
+          }
+          this.webSocketManager.sendMessage(querySetModification);
+          for (const message of this.requestManager.restart()) {
+            this.webSocketManager.sendMessage(message);
+          }
+        },
+        onResume: () => {
+          const [querySetModification, authModification] = this.state.resume();
+          if (authModification) {
+            this.webSocketManager.sendMessage(authModification);
+          }
+          if (querySetModification) {
+            this.webSocketManager.sendMessage(querySetModification);
+          }
+          for (const message of this.requestManager.resume()) {
+            this.webSocketManager.sendMessage(message);
+          }
+        },
+        onMessage: (serverMessage) => {
+          if (!this.firstMessageReceived) {
+            this.firstMessageReceived = true;
+            this.mark("convexFirstMessageReceived");
+            this.reportMarks();
+          }
+          switch (serverMessage.type) {
+            case "Transition": {
+              this.observedTimestamp(serverMessage.endVersion.ts);
+              this.authenticationManager.onTransition(serverMessage);
+              this.remoteQuerySet.transition(serverMessage);
+              this.state.transition(serverMessage);
+              const completedRequests = this.requestManager.removeCompleted(
+                this.remoteQuerySet.timestamp()
+              );
+              this.notifyOnQueryResultChanges(completedRequests);
+              break;
+            }
+            case "MutationResponse": {
+              if (serverMessage.success) {
+                this.observedTimestamp(serverMessage.ts);
+              }
+              const completedMutationInfo = this.requestManager.onResponse(serverMessage);
+              if (completedMutationInfo !== null) {
+                this.notifyOnQueryResultChanges(
+                  /* @__PURE__ */ new Map([
+                    [
+                      completedMutationInfo.requestId,
+                      completedMutationInfo.result
+                    ]
+                  ])
+                );
+              }
+              break;
+            }
+            case "ActionResponse": {
+              this.requestManager.onResponse(serverMessage);
+              break;
+            }
+            case "AuthError": {
+              this.authenticationManager.onAuthError(serverMessage);
+              break;
+            }
+            case "FatalError": {
+              const error = logFatalError(this.logger, serverMessage.error);
+              void this.webSocketManager.terminate();
+              throw error;
+            }
+            default: {
+              serverMessage;
+            }
+          }
+          return {
+            hasSyncedPastLastReconnect: this.hasSyncedPastLastReconnect()
+          };
+        },
+        onServerDisconnectError: options.onServerDisconnectError
+      },
+      webSocketConstructor,
+      this.logger,
+      this.markConnectionStateDirty,
+      this.debug
+    );
+    this.mark("convexClientConstructed");
+    if (options.expectAuth) {
+      pauseSocket();
     }
   }
   /**
-   * Obtain the {@link ConvexHttpClient}'s URL to its backend.
-   * @deprecated Use url, which returns the url without /api at the end.
-   *
-   * @returns The URL to the Convex backend, including the client's API version.
+   * Return true if there is outstanding work from prior to the time of the most recent restart.
+   * This indicates that the client has not proven itself to have gotten past the issue that
+   * potentially led to the restart. Use this to influence when to reset backoff after a failure.
    */
-  backendUrl() {
-    return `${this.address}/api`;
+  hasSyncedPastLastReconnect() {
+    const hasSyncedPastLastReconnect = this.requestManager.hasSyncedPastLastReconnect() || this.state.hasSyncedPastLastReconnect();
+    return hasSyncedPastLastReconnect;
+  }
+  observedTimestamp(observedTs) {
+    if (this.maxObservedTimestamp === void 0 || this.maxObservedTimestamp.lessThanOrEqual(observedTs)) {
+      this.maxObservedTimestamp = observedTs;
+    }
+  }
+  getMaxObservedTimestamp() {
+    return this.maxObservedTimestamp;
+  }
+  /**
+   * Compute the current query results based on the remoteQuerySet and the
+   * current optimistic updates and call `onTransition` for all the changed
+   * queries.
+   *
+   * @param completedMutations - A set of mutation IDs whose optimistic updates
+   * are no longer needed.
+   */
+  notifyOnQueryResultChanges(completedRequests) {
+    const remoteQueryResults = this.remoteQuerySet.remoteQueryResults();
+    const queryTokenToValue = /* @__PURE__ */ new Map();
+    for (const [queryId, result] of remoteQueryResults) {
+      const queryToken = this.state.queryToken(queryId);
+      if (queryToken !== null) {
+        const query = {
+          result,
+          udfPath: this.state.queryPath(queryId),
+          args: this.state.queryArgs(queryId)
+        };
+        queryTokenToValue.set(queryToken, query);
+      }
+    }
+    const changedQueryTokens = this.optimisticQueryResults.ingestQueryResultsFromServer(
+      queryTokenToValue,
+      new Set(completedRequests.keys())
+    );
+    this.handleTransition({
+      queries: changedQueryTokens.map((token) => {
+        const optimisticResult = this.optimisticQueryResults.rawQueryResult(token);
+        return {
+          token,
+          modification: {
+            kind: "Updated",
+            result: optimisticResult
+          }
+        };
+      }),
+      reflectedMutations: Array.from(completedRequests).map(
+        ([requestId, result]) => ({
+          requestId,
+          result
+        })
+      ),
+      timestamp: this.remoteQuerySet.timestamp()
+    });
+  }
+  handleTransition(transition) {
+    for (const fn2 of this._onTransitionFns.values()) {
+      fn2(transition);
+    }
+  }
+  /**
+   * Add a handler that will be called on a transition.
+   *
+   * Any external side effects (e.g. setting React state) should be handled here.
+   *
+   * @param fn
+   *
+   * @returns
+   */
+  addOnTransitionHandler(fn2) {
+    const id = this._transitionHandlerCounter++;
+    this._onTransitionFns.set(id, fn2);
+    return () => this._onTransitionFns.delete(id);
+  }
+  /**
+   * Get the current JWT auth token and decoded claims.
+   */
+  getCurrentAuthClaims() {
+    const authToken = this.state.getAuth();
+    let decoded = {};
+    if (authToken && authToken.tokenType === "User") {
+      try {
+        decoded = authToken ? jwtDecode(authToken.value) : {};
+      } catch {
+        decoded = {};
+      }
+    } else {
+      return void 0;
+    }
+    return { token: authToken.value, decoded };
+  }
+  /**
+   * Set the authentication token to be used for subsequent queries and mutations.
+   * `fetchToken` will be called automatically again if a token expires.
+   * `fetchToken` should return `null` if the token cannot be retrieved, for example
+   * when the user's rights were permanently revoked.
+   * @param fetchToken - an async function returning the JWT-encoded OpenID Connect Identity Token
+   * @param onChange - a callback that will be called when the authentication status changes
+   */
+  setAuth(fetchToken, onChange) {
+    void this.authenticationManager.setConfig(fetchToken, onChange);
+  }
+  hasAuth() {
+    return this.state.hasAuth();
+  }
+  /** @internal */
+  setAdminAuth(value, fakeUserIdentity) {
+    const message = this.state.setAdminAuth(value, fakeUserIdentity);
+    this.webSocketManager.sendMessage(message);
+  }
+  clearAuth() {
+    const message = this.state.clearAuth();
+    this.webSocketManager.sendMessage(message);
+  }
+  /**
+     * Subscribe to a query function.
+     *
+     * Whenever this query's result changes, the `onTransition` callback
+     * passed into the constructor will be called.
+     *
+     * @param name - The name of the query.
+     * @param args - An arguments object for the query. If this is omitted, the
+     * arguments will be `{}`.
+     * @param options - A {@link SubscribeOptions} options object for this query.
+  
+     * @returns An object containing a {@link QueryToken} corresponding to this
+     * query and an `unsubscribe` callback.
+     */
+  subscribe(name, args, options) {
+    const argsObject = parseArgs(args);
+    const { modification, queryToken, unsubscribe } = this.state.subscribe(
+      name,
+      argsObject,
+      options?.journal,
+      options?.componentPath
+    );
+    if (modification !== null) {
+      this.webSocketManager.sendMessage(modification);
+    }
+    return {
+      queryToken,
+      unsubscribe: () => {
+        const modification2 = unsubscribe();
+        if (modification2) {
+          this.webSocketManager.sendMessage(modification2);
+        }
+      }
+    };
+  }
+  /**
+   * A query result based only on the current, local state.
+   *
+   * The only way this will return a value is if we're already subscribed to the
+   * query or its value has been set optimistically.
+   */
+  localQueryResult(udfPath, args) {
+    const argsObject = parseArgs(args);
+    const queryToken = serializePathAndArgs(udfPath, argsObject);
+    return this.optimisticQueryResults.queryResult(queryToken);
+  }
+  /**
+   * Get query result by query token based on current, local state
+   *
+   * The only way this will return a value is if we're already subscribed to the
+   * query or its value has been set optimistically.
+   *
+   * @internal
+   */
+  localQueryResultByToken(queryToken) {
+    return this.optimisticQueryResults.queryResult(queryToken);
+  }
+  /**
+   * Whether local query result is available for a token.
+   *
+   * This method does not throw if the result is an error.
+   *
+   * @internal
+   */
+  hasLocalQueryResultByToken(queryToken) {
+    return this.optimisticQueryResults.hasQueryResult(queryToken);
+  }
+  /**
+   * @internal
+   */
+  localQueryLogs(udfPath, args) {
+    const argsObject = parseArgs(args);
+    const queryToken = serializePathAndArgs(udfPath, argsObject);
+    return this.optimisticQueryResults.queryLogs(queryToken);
+  }
+  /**
+   * Retrieve the current {@link QueryJournal} for this query function.
+   *
+   * If we have not yet received a result for this query, this will be `undefined`.
+   *
+   * @param name - The name of the query.
+   * @param args - The arguments object for this query.
+   * @returns The query's {@link QueryJournal} or `undefined`.
+   */
+  queryJournal(name, args) {
+    const argsObject = parseArgs(args);
+    const queryToken = serializePathAndArgs(name, argsObject);
+    return this.state.queryJournal(queryToken);
+  }
+  /**
+   * Get the current {@link ConnectionState} between the client and the Convex
+   * backend.
+   *
+   * @returns The {@link ConnectionState} with the Convex backend.
+   */
+  connectionState() {
+    const wsConnectionState = this.webSocketManager.connectionState();
+    return {
+      hasInflightRequests: this.requestManager.hasInflightRequests(),
+      isWebSocketConnected: wsConnectionState.isConnected,
+      hasEverConnected: wsConnectionState.hasEverConnected,
+      connectionCount: wsConnectionState.connectionCount,
+      connectionRetries: wsConnectionState.connectionRetries,
+      timeOfOldestInflightRequest: this.requestManager.timeOfOldestInflightRequest(),
+      inflightMutations: this.requestManager.inflightMutations(),
+      inflightActions: this.requestManager.inflightActions()
+    };
+  }
+  /**
+   * Subscribe to the {@link ConnectionState} between the client and the Convex
+   * backend, calling a callback each time it changes.
+   *
+   * Subscribed callbacks will be called when any part of ConnectionState changes.
+   * ConnectionState may grow in future versions (e.g. to provide a array of
+   * inflight requests) in which case callbacks would be called more frequently.
+   *
+   * @returns An unsubscribe function to stop listening.
+   */
+  subscribeToConnectionState(cb) {
+    const id = this.nextConnectionStateSubscriberId++;
+    this.connectionStateSubscribers.set(id, cb);
+    return () => {
+      this.connectionStateSubscribers.delete(id);
+    };
+  }
+  /**
+     * Execute a mutation function.
+     *
+     * @param name - The name of the mutation.
+     * @param args - An arguments object for the mutation. If this is omitted,
+     * the arguments will be `{}`.
+     * @param options - A {@link MutationOptions} options object for this mutation.
+  
+     * @returns - A promise of the mutation's result.
+     */
+  async mutation(name, args, options) {
+    const result = await this.mutationInternal(name, args, options);
+    if (!result.success) {
+      if (result.errorData !== void 0) {
+        throw forwardData(
+          result,
+          new ConvexError(
+            createHybridErrorStacktrace("mutation", name, result)
+          )
+        );
+      }
+      throw new Error(createHybridErrorStacktrace("mutation", name, result));
+    }
+    return result.value;
+  }
+  /**
+   * @internal
+   */
+  async mutationInternal(udfPath, args, options, componentPath) {
+    const { mutationPromise } = this.enqueueMutation(
+      udfPath,
+      args,
+      options,
+      componentPath
+    );
+    return mutationPromise;
+  }
+  /**
+   * @internal
+   */
+  enqueueMutation(udfPath, args, options, componentPath) {
+    const mutationArgs = parseArgs(args);
+    this.tryReportLongDisconnect();
+    const requestId = this.nextRequestId;
+    this._nextRequestId++;
+    if (options !== void 0) {
+      const optimisticUpdate = options.optimisticUpdate;
+      if (optimisticUpdate !== void 0) {
+        const wrappedUpdate = (localQueryStore) => {
+          const result = optimisticUpdate(
+            localQueryStore,
+            mutationArgs
+          );
+          if (result instanceof Promise) {
+            this.logger.warn(
+              "Optimistic update handler returned a Promise. Optimistic updates should be synchronous."
+            );
+          }
+        };
+        const changedQueryTokens = this.optimisticQueryResults.applyOptimisticUpdate(
+          wrappedUpdate,
+          requestId
+        );
+        const changedQueries = changedQueryTokens.map((token) => {
+          const localResult = this.localQueryResultByToken(token);
+          return {
+            token,
+            modification: {
+              kind: "Updated",
+              result: localResult === void 0 ? void 0 : {
+                success: true,
+                value: localResult,
+                logLines: []
+              }
+            }
+          };
+        });
+        this.handleTransition({
+          queries: changedQueries,
+          reflectedMutations: [],
+          timestamp: this.remoteQuerySet.timestamp()
+        });
+      }
+    }
+    const message = {
+      type: "Mutation",
+      requestId,
+      udfPath,
+      componentPath,
+      args: [convexToJson(mutationArgs)]
+    };
+    const mightBeSent = this.webSocketManager.sendMessage(message);
+    const mutationPromise = this.requestManager.request(message, mightBeSent);
+    return {
+      requestId,
+      mutationPromise
+    };
+  }
+  /**
+   * Execute an action function.
+   *
+   * @param name - The name of the action.
+   * @param args - An arguments object for the action. If this is omitted,
+   * the arguments will be `{}`.
+   * @returns A promise of the action's result.
+   */
+  async action(name, args) {
+    const result = await this.actionInternal(name, args);
+    if (!result.success) {
+      if (result.errorData !== void 0) {
+        throw forwardData(
+          result,
+          new ConvexError(createHybridErrorStacktrace("action", name, result))
+        );
+      }
+      throw new Error(createHybridErrorStacktrace("action", name, result));
+    }
+    return result.value;
+  }
+  /**
+   * @internal
+   */
+  async actionInternal(udfPath, args, componentPath) {
+    const actionArgs = parseArgs(args);
+    const requestId = this.nextRequestId;
+    this._nextRequestId++;
+    this.tryReportLongDisconnect();
+    const message = {
+      type: "Action",
+      requestId,
+      udfPath,
+      componentPath,
+      args: [convexToJson(actionArgs)]
+    };
+    const mightBeSent = this.webSocketManager.sendMessage(message);
+    return this.requestManager.request(message, mightBeSent);
+  }
+  /**
+   * Close any network handles associated with this client and stop all subscriptions.
+   *
+   * Call this method when you're done with an {@link BaseConvexClient} to
+   * dispose of its sockets and resources.
+   *
+   * @returns A `Promise` fulfilled when the connection has been completely closed.
+   */
+  async close() {
+    this.authenticationManager.stop();
+    return this.webSocketManager.terminate();
   }
   /**
    * Return the address for this client, useful for creating a new client.
@@ -1462,373 +3964,813 @@ var ConvexHttpClient = class {
     return this.address;
   }
   /**
-   * Set the authentication token to be used for subsequent queries and mutations.
-   *
-   * Should be called whenever the token changes (i.e. due to expiration and refresh).
-   *
-   * @param value - JWT-encoded OpenID Connect identity token.
-   */
-  setAuth(value) {
-    this.clearAuth();
-    this.auth = value;
-  }
-  /**
-   * Set admin auth token to allow calling internal queries, mutations, and actions
-   * and acting as an identity.
-   *
    * @internal
    */
-  setAdminAuth(token, actingAsIdentity) {
-    this.clearAuth();
-    if (actingAsIdentity !== void 0) {
-      const bytes = new TextEncoder().encode(JSON.stringify(actingAsIdentity));
-      const actingAsIdentityEncoded = btoa(String.fromCodePoint(...bytes));
-      this.adminAuth = `${token}:${actingAsIdentityEncoded}`;
-    } else {
-      this.adminAuth = token;
-    }
+  get nextRequestId() {
+    return this._nextRequestId;
   }
   /**
-   * Clear the current authentication token if set.
-   */
-  clearAuth() {
-    this.auth = void 0;
-    this.adminAuth = void 0;
-  }
-  /**
-   * Sets whether the result log lines should be printed on the console or not.
-   *
    * @internal
    */
-  setDebug(debug) {
-    this.debug = debug;
+  get sessionId() {
+    return this._sessionId;
   }
   /**
-   * Used to customize the fetch behavior in some runtimes.
-   *
-   * @internal
+   * Reports performance marks to the server. This should only be called when
+   * we have a functional websocket.
    */
-  setFetchOptions(fetchOptions) {
-    this.fetchOptions = fetchOptions;
-  }
-  /**
-   * This API is experimental: it may change or disappear.
-   *
-   * Execute a Convex query function at the same timestamp as every other
-   * consistent query execution run by this HTTP client.
-   *
-   * This doesn't make sense for long-lived ConvexHttpClients as Convex
-   * backends can read a limited amount into the past: beyond 30 seconds
-   * in the past may not be available.
-   *
-   * Create a new client to use a consistent time.
-   *
-   * @param name - The name of the query.
-   * @param args - The arguments object for the query. If this is omitted,
-   * the arguments will be `{}`.
-   * @returns A promise of the query's result.
-   *
-   * @deprecated This API is experimental: it may change or disappear.
-   */
-  async consistentQuery(query, ...args) {
-    const queryArgs = parseArgs(args[0]);
-    const timestampPromise = this.getTimestamp();
-    return await this.queryInner(query, queryArgs, { timestampPromise });
-  }
-  async getTimestamp() {
-    if (this.encodedTsPromise) {
-      return this.encodedTsPromise;
-    }
-    return this.encodedTsPromise = this.getTimestampInner();
-  }
-  async getTimestampInner() {
-    const localFetch = this.fetch || specifiedFetch || fetch;
-    const headers = {
-      "Content-Type": "application/json",
-      "Convex-Client": `npm-${version}`
-    };
-    const response = await localFetch(`${this.address}/api/query_ts`, {
-      ...this.fetchOptions,
-      method: "POST",
-      headers
-    });
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    const { ts } = await response.json();
-    return ts;
-  }
-  /**
-   * Execute a Convex query function.
-   *
-   * @param name - The name of the query.
-   * @param args - The arguments object for the query. If this is omitted,
-   * the arguments will be `{}`.
-   * @returns A promise of the query's result.
-   */
-  async query(query, ...args) {
-    const queryArgs = parseArgs(args[0]);
-    return await this.queryInner(query, queryArgs, {});
-  }
-  async queryInner(query, queryArgs, options) {
-    const name = getFunctionName(query);
-    const args = [convexToJson(queryArgs)];
-    const headers = {
-      "Content-Type": "application/json",
-      "Convex-Client": `npm-${version}`
-    };
-    if (this.adminAuth) {
-      headers["Authorization"] = `Convex ${this.adminAuth}`;
-    } else if (this.auth) {
-      headers["Authorization"] = `Bearer ${this.auth}`;
-    }
-    const localFetch = this.fetch || specifiedFetch || fetch;
-    const timestamp = options.timestampPromise ? await options.timestampPromise : void 0;
-    const body = JSON.stringify({
-      path: name,
-      format: "convex_encoded_json",
-      args,
-      ...timestamp ? { ts: timestamp } : {}
-    });
-    const endpoint = timestamp ? `${this.address}/api/query_at_ts` : `${this.address}/api/query`;
-    const response = await localFetch(endpoint, {
-      ...this.fetchOptions,
-      body,
-      method: "POST",
-      headers
-    });
-    if (!response.ok && response.status !== STATUS_CODE_UDF_FAILED) {
-      throw new Error(await response.text());
-    }
-    const respJSON = await response.json();
+  reportMarks() {
     if (this.debug) {
-      for (const line of respJSON.logLines ?? []) {
-        logForFunction(this.logger, "info", "query", name, line);
-      }
-    }
-    switch (respJSON.status) {
-      case "success":
-        return jsonToConvex(respJSON.value);
-      case "error":
-        if (respJSON.errorData !== void 0) {
-          throw forwardErrorData(
-            respJSON.errorData,
-            new ConvexError(respJSON.errorMessage)
-          );
-        }
-        throw new Error(respJSON.errorMessage);
-      default:
-        throw new Error(`Invalid response: ${JSON.stringify(respJSON)}`);
+      const report = getMarksReport(this.sessionId);
+      this.webSocketManager.sendMessage({
+        type: "Event",
+        eventType: "ClientConnect",
+        event: report
+      });
     }
   }
-  async mutationInner(mutation, mutationArgs) {
-    const name = getFunctionName(mutation);
-    const body = JSON.stringify({
-      path: name,
-      format: "convex_encoded_json",
-      args: [convexToJson(mutationArgs)]
-    });
-    const headers = {
-      "Content-Type": "application/json",
-      "Convex-Client": `npm-${version}`
-    };
-    if (this.adminAuth) {
-      headers["Authorization"] = `Convex ${this.adminAuth}`;
-    } else if (this.auth) {
-      headers["Authorization"] = `Bearer ${this.auth}`;
-    }
-    const localFetch = this.fetch || specifiedFetch || fetch;
-    const response = await localFetch(`${this.address}/api/mutation`, {
-      ...this.fetchOptions,
-      body,
-      method: "POST",
-      headers
-    });
-    if (!response.ok && response.status !== STATUS_CODE_UDF_FAILED) {
-      throw new Error(await response.text());
-    }
-    const respJSON = await response.json();
-    if (this.debug) {
-      for (const line of respJSON.logLines ?? []) {
-        logForFunction(this.logger, "info", "mutation", name, line);
-      }
-    }
-    switch (respJSON.status) {
-      case "success":
-        return jsonToConvex(respJSON.value);
-      case "error":
-        if (respJSON.errorData !== void 0) {
-          throw forwardErrorData(
-            respJSON.errorData,
-            new ConvexError(respJSON.errorMessage)
-          );
-        }
-        throw new Error(respJSON.errorMessage);
-      default:
-        throw new Error(`Invalid response: ${JSON.stringify(respJSON)}`);
-    }
-  }
-  async processMutationQueue() {
-    if (this.isProcessingQueue) {
+  tryReportLongDisconnect() {
+    if (!this.debug) {
       return;
     }
-    this.isProcessingQueue = true;
-    while (this.mutationQueue.length > 0) {
-      const { mutation, args, resolve, reject } = this.mutationQueue.shift();
-      try {
-        const result = await this.mutationInner(mutation, args);
-        resolve(result);
-      } catch (error) {
-        reject(error);
-      }
+    const timeOfOldestRequest = this.connectionState().timeOfOldestInflightRequest;
+    if (timeOfOldestRequest === null || Date.now() - timeOfOldestRequest.getTime() <= 60 * 1e3) {
+      return;
     }
-    this.isProcessingQueue = false;
-  }
-  enqueueMutation(mutation, args) {
-    return new Promise((resolve, reject) => {
-      this.mutationQueue.push({ mutation, args, resolve, reject });
-      void this.processMutationQueue();
-    });
-  }
-  /**
-   * Execute a Convex mutation function. Mutations are queued by default.
-   *
-   * @param name - The name of the mutation.
-   * @param args - The arguments object for the mutation. If this is omitted,
-   * the arguments will be `{}`.
-   * @param options - An optional object containing
-   * @returns A promise of the mutation's result.
-   */
-  async mutation(mutation, ...args) {
-    const [fnArgs, options] = args;
-    const mutationArgs = parseArgs(fnArgs);
-    const queued = !options?.skipQueue;
-    if (queued) {
-      return await this.enqueueMutation(mutation, mutationArgs);
-    } else {
-      return await this.mutationInner(mutation, mutationArgs);
-    }
-  }
-  /**
-   * Execute a Convex action function. Actions are not queued.
-   *
-   * @param name - The name of the action.
-   * @param args - The arguments object for the action. If this is omitted,
-   * the arguments will be `{}`.
-   * @returns A promise of the action's result.
-   */
-  async action(action, ...args) {
-    const actionArgs = parseArgs(args[0]);
-    const name = getFunctionName(action);
-    const body = JSON.stringify({
-      path: name,
-      format: "convex_encoded_json",
-      args: [convexToJson(actionArgs)]
-    });
-    const headers = {
-      "Content-Type": "application/json",
-      "Convex-Client": `npm-${version}`
-    };
-    if (this.adminAuth) {
-      headers["Authorization"] = `Convex ${this.adminAuth}`;
-    } else if (this.auth) {
-      headers["Authorization"] = `Bearer ${this.auth}`;
-    }
-    const localFetch = this.fetch || specifiedFetch || fetch;
-    const response = await localFetch(`${this.address}/api/action`, {
-      ...this.fetchOptions,
-      body,
+    const endpoint = `${this.address}/api/debug_event`;
+    fetch(endpoint, {
       method: "POST",
-      headers
-    });
-    if (!response.ok && response.status !== STATUS_CODE_UDF_FAILED) {
-      throw new Error(await response.text());
-    }
-    const respJSON = await response.json();
-    if (this.debug) {
-      for (const line of respJSON.logLines ?? []) {
-        logForFunction(this.logger, "info", "action", name, line);
+      headers: {
+        "Content-Type": "application/json",
+        "Convex-Client": `npm-${version}`
+      },
+      body: JSON.stringify({ event: "LongWebsocketDisconnect" })
+    }).then((response) => {
+      if (!response.ok) {
+        this.logger.warn(
+          "Analytics request failed with response:",
+          response.body
+        );
       }
-    }
-    switch (respJSON.status) {
-      case "success":
-        return jsonToConvex(respJSON.value);
-      case "error":
-        if (respJSON.errorData !== void 0) {
-          throw forwardErrorData(
-            respJSON.errorData,
-            new ConvexError(respJSON.errorMessage)
-          );
-        }
-        throw new Error(respJSON.errorMessage);
-      default:
-        throw new Error(`Invalid response: ${JSON.stringify(respJSON)}`);
-    }
+    }).catch((error) => {
+      this.logger.warn("Analytics response failed with error:", error);
+    });
+  }
+};
+
+// node_modules/convex/dist/esm/browser/sync/pagination.js
+function asPaginationResult(value) {
+  if (typeof value !== "object" || value === null || !Array.isArray(value.page) || typeof value.isDone !== "boolean" || typeof value.continueCursor !== "string") {
+    throw new Error(`Not a valid paginated query result: ${value?.toString()}`);
+  }
+  return value;
+}
+
+// node_modules/convex/dist/esm/browser/sync/paginated_query_client.js
+var __defProp13 = Object.defineProperty;
+var __defNormalProp12 = (obj, key, value) => key in obj ? __defProp13(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField12 = (obj, key, value) => __defNormalProp12(obj, typeof key !== "symbol" ? key + "" : key, value);
+var PaginatedQueryClient = class {
+  constructor(client, onTransition) {
+    this.client = client;
+    this.onTransition = onTransition;
+    __publicField12(this, "paginatedQuerySet", /* @__PURE__ */ new Map());
+    __publicField12(this, "lastTransitionTs");
+    this.lastTransitionTs = Long.fromNumber(0);
+    this.client.addOnTransitionHandler(
+      (transition) => this.onBaseTransition(transition)
+    );
   }
   /**
-   * Execute a Convex function of an unknown type. These function calls are not queued.
+   * Subscribe to a paginated query.
    *
-   * @param name - The name of the function.
-   * @param args - The arguments object for the function. If this is omitted,
-   * the arguments will be `{}`.
-   * @returns A promise of the function's result.
+   * @param name - The name of the paginated query function
+   * @param args - Arguments for the query (excluding paginationOpts)
+   * @param options - Pagination options including initialNumItems
+   * @returns Object with paginatedQueryToken and unsubscribe function
+   */
+  subscribe(name, args, options) {
+    const canonicalizedUdfPath = canonicalizeUdfPath(name);
+    const token = serializePaginatedPathAndArgs(
+      canonicalizedUdfPath,
+      args,
+      options
+    );
+    const unsubscribe = () => this.removePaginatedQuerySubscriber(token);
+    const existingEntry = this.paginatedQuerySet.get(token);
+    if (existingEntry) {
+      existingEntry.numSubscribers += 1;
+      return {
+        paginatedQueryToken: token,
+        unsubscribe
+      };
+    }
+    this.paginatedQuerySet.set(token, {
+      token,
+      canonicalizedUdfPath,
+      args,
+      numSubscribers: 1,
+      options: { initialNumItems: options.initialNumItems },
+      nextPageKey: 0,
+      pageKeys: [],
+      pageKeyToQuery: /* @__PURE__ */ new Map(),
+      ongoingSplits: /* @__PURE__ */ new Map(),
+      skip: false,
+      id: options.id
+    });
+    this.addPageToPaginatedQuery(token, null, options.initialNumItems);
+    return {
+      paginatedQueryToken: token,
+      unsubscribe
+    };
+  }
+  /**
+   * Get current results for a paginated query based on local state.
+   *
+   * Throws an error when one of the pages has errored.
+   */
+  localQueryResult(name, args, options) {
+    const canonicalizedUdfPath = canonicalizeUdfPath(name);
+    const token = serializePaginatedPathAndArgs(
+      canonicalizedUdfPath,
+      args,
+      options
+    );
+    return this.localQueryResultByToken(token);
+  }
+  /**
+   * @internal
+   */
+  localQueryResultByToken(token) {
+    const paginatedQuery = this.paginatedQuerySet.get(token);
+    if (!paginatedQuery) {
+      return void 0;
+    }
+    const activePages = this.activePageQueryTokens(paginatedQuery);
+    if (activePages.length === 0) {
+      return {
+        results: [],
+        status: "LoadingFirstPage",
+        loadMore: (numItems) => {
+          return this.loadMoreOfPaginatedQuery(token, numItems);
+        }
+      };
+    }
+    let allResults = [];
+    let hasUndefined = false;
+    let isDone = false;
+    for (const pageToken of activePages) {
+      const result = this.client.localQueryResultByToken(pageToken);
+      if (result === void 0) {
+        hasUndefined = true;
+        isDone = false;
+        continue;
+      }
+      const paginationResult = asPaginationResult(result);
+      allResults = allResults.concat(paginationResult.page);
+      isDone = !!paginationResult.isDone;
+    }
+    let status;
+    if (hasUndefined) {
+      status = allResults.length === 0 ? "LoadingFirstPage" : "LoadingMore";
+    } else if (isDone) {
+      status = "Exhausted";
+    } else {
+      status = "CanLoadMore";
+    }
+    return {
+      results: allResults,
+      status,
+      loadMore: (numItems) => {
+        return this.loadMoreOfPaginatedQuery(token, numItems);
+      }
+    };
+  }
+  onBaseTransition(transition) {
+    const changedBaseTokens = transition.queries.map((q2) => q2.token);
+    const changed = this.queriesContainingTokens(changedBaseTokens);
+    let paginatedQueries = [];
+    if (changed.length > 0) {
+      this.processPaginatedQuerySplits(
+        changed,
+        (token) => this.client.localQueryResultByToken(token)
+      );
+      paginatedQueries = changed.map((token) => ({
+        token,
+        modification: {
+          kind: "Updated",
+          result: this.localQueryResultByToken(token)
+        }
+      }));
+    }
+    const extendedTransition = {
+      ...transition,
+      paginatedQueries
+    };
+    this.onTransition(extendedTransition);
+  }
+  /**
+   * Load more items for a paginated query.
+   *
+   * This *always* causes a transition, the status of the query
+   * has probably changed from "CanLoadMore" to "LoadingMore".
+   * Data might have changed too: maybe a subscription to this page
+   * query already exists (unlikely but possible) or this page query
+   * has an optimistic update providing some initial data.
    *
    * @internal
    */
-  async function(anyFunction, componentPath, ...args) {
-    const functionArgs = parseArgs(args[0]);
-    const name = typeof anyFunction === "string" ? anyFunction : getFunctionName(anyFunction);
-    const body = JSON.stringify({
-      componentPath,
-      path: name,
-      format: "convex_encoded_json",
-      args: convexToJson(functionArgs)
-    });
-    const headers = {
-      "Content-Type": "application/json",
-      "Convex-Client": `npm-${version}`
+  loadMoreOfPaginatedQuery(token, numItems) {
+    this.mustGetPaginatedQuery(token);
+    const lastPageToken = this.queryTokenForLastPageOfPaginatedQuery(token);
+    const lastPageResult = this.client.localQueryResultByToken(lastPageToken);
+    if (!lastPageResult) {
+      return false;
+    }
+    const paginationResult = asPaginationResult(lastPageResult);
+    if (paginationResult.isDone) {
+      return false;
+    }
+    this.addPageToPaginatedQuery(
+      token,
+      paginationResult.continueCursor,
+      numItems
+    );
+    const loadMoreTransition = {
+      timestamp: this.lastTransitionTs,
+      reflectedMutations: [],
+      queries: [],
+      paginatedQueries: [
+        {
+          token,
+          modification: {
+            kind: "Updated",
+            result: this.localQueryResultByToken(token)
+          }
+        }
+      ]
     };
-    if (this.adminAuth) {
-      headers["Authorization"] = `Convex ${this.adminAuth}`;
-    } else if (this.auth) {
-      headers["Authorization"] = `Bearer ${this.auth}`;
+    this.onTransition(loadMoreTransition);
+    return true;
+  }
+  /**
+   * @internal
+   */
+  queriesContainingTokens(queryTokens) {
+    if (queryTokens.length === 0) {
+      return [];
     }
-    const localFetch = this.fetch || specifiedFetch || fetch;
-    const response = await localFetch(`${this.address}/api/function`, {
-      ...this.fetchOptions,
-      body,
-      method: "POST",
-      headers
-    });
-    if (!response.ok && response.status !== STATUS_CODE_UDF_FAILED) {
-      throw new Error(await response.text());
-    }
-    const respJSON = await response.json();
-    if (this.debug) {
-      for (const line of respJSON.logLines ?? []) {
-        logForFunction(this.logger, "info", "any", name, line);
+    const changed = [];
+    const queryTokenSet = new Set(queryTokens);
+    for (const [paginatedToken, paginatedQuery] of this.paginatedQuerySet) {
+      for (const pageToken of this.allQueryTokens(paginatedQuery)) {
+        if (queryTokenSet.has(pageToken)) {
+          changed.push(paginatedToken);
+          break;
+        }
       }
     }
-    switch (respJSON.status) {
-      case "success":
-        return jsonToConvex(respJSON.value);
-      case "error":
-        if (respJSON.errorData !== void 0) {
-          throw forwardErrorData(
-            respJSON.errorData,
-            new ConvexError(respJSON.errorMessage)
+    return changed;
+  }
+  /**
+   * @internal
+   */
+  processPaginatedQuerySplits(changed, getResult) {
+    for (const paginatedQueryToken of changed) {
+      const paginatedQuery = this.mustGetPaginatedQuery(paginatedQueryToken);
+      const { ongoingSplits, pageKeyToQuery, pageKeys } = paginatedQuery;
+      for (const [pageKey, [splitKey1, splitKey2]] of ongoingSplits) {
+        const bothNewPagesLoaded = getResult(pageKeyToQuery.get(splitKey1).queryToken) !== void 0 && getResult(pageKeyToQuery.get(splitKey2).queryToken) !== void 0;
+        if (bothNewPagesLoaded) {
+          this.completePaginatedQuerySplit(
+            paginatedQuery,
+            pageKey,
+            splitKey1,
+            splitKey2
           );
         }
-        throw new Error(respJSON.errorMessage);
-      default:
-        throw new Error(`Invalid response: ${JSON.stringify(respJSON)}`);
+      }
+      for (const pageKey of pageKeys) {
+        if (ongoingSplits.has(pageKey)) {
+          continue;
+        }
+        const pageToken = pageKeyToQuery.get(pageKey).queryToken;
+        const pageResult = getResult(pageToken);
+        if (!pageResult) {
+          continue;
+        }
+        const result = asPaginationResult(pageResult);
+        const shouldSplit = result.splitCursor && (result.pageStatus === "SplitRecommended" || result.pageStatus === "SplitRequired" || // This client-driven page splitting condition will change in the future.
+        result.page.length > paginatedQuery.options.initialNumItems * 2);
+        if (shouldSplit) {
+          this.splitPaginatedQueryPage(
+            paginatedQuery,
+            pageKey,
+            result.splitCursor,
+            // we just checked
+            result.continueCursor
+          );
+        }
+      }
     }
   }
+  splitPaginatedQueryPage(paginatedQuery, pageKey, splitCursor, continueCursor) {
+    const splitKey1 = paginatedQuery.nextPageKey++;
+    const splitKey2 = paginatedQuery.nextPageKey++;
+    const paginationOpts = {
+      cursor: continueCursor,
+      numItems: paginatedQuery.options.initialNumItems,
+      id: paginatedQuery.id
+    };
+    const firstSubscription = this.client.subscribe(
+      paginatedQuery.canonicalizedUdfPath,
+      {
+        ...paginatedQuery.args,
+        paginationOpts: {
+          ...paginationOpts,
+          cursor: null,
+          // Start from beginning for first split
+          endCursor: splitCursor
+        }
+      }
+    );
+    paginatedQuery.pageKeyToQuery.set(splitKey1, firstSubscription);
+    const secondSubscription = this.client.subscribe(
+      paginatedQuery.canonicalizedUdfPath,
+      {
+        ...paginatedQuery.args,
+        paginationOpts: {
+          ...paginationOpts,
+          cursor: splitCursor,
+          endCursor: continueCursor
+        }
+      }
+    );
+    paginatedQuery.pageKeyToQuery.set(splitKey2, secondSubscription);
+    paginatedQuery.ongoingSplits.set(pageKey, [splitKey1, splitKey2]);
+  }
+  /**
+   * @internal
+   */
+  addPageToPaginatedQuery(token, continueCursor, numItems) {
+    const paginatedQuery = this.mustGetPaginatedQuery(token);
+    const pageKey = paginatedQuery.nextPageKey++;
+    const paginationOpts = {
+      cursor: continueCursor,
+      numItems,
+      id: paginatedQuery.id
+    };
+    const pageArgs = {
+      ...paginatedQuery.args,
+      paginationOpts
+    };
+    const subscription = this.client.subscribe(
+      paginatedQuery.canonicalizedUdfPath,
+      pageArgs
+    );
+    paginatedQuery.pageKeys.push(pageKey);
+    paginatedQuery.pageKeyToQuery.set(pageKey, subscription);
+    return subscription;
+  }
+  removePaginatedQuerySubscriber(token) {
+    const paginatedQuery = this.paginatedQuerySet.get(token);
+    if (!paginatedQuery) {
+      return;
+    }
+    paginatedQuery.numSubscribers -= 1;
+    if (paginatedQuery.numSubscribers > 0) {
+      return;
+    }
+    for (const subscription of paginatedQuery.pageKeyToQuery.values()) {
+      subscription.unsubscribe();
+    }
+    this.paginatedQuerySet.delete(token);
+  }
+  completePaginatedQuerySplit(paginatedQuery, pageKey, splitKey1, splitKey2) {
+    const originalQuery = paginatedQuery.pageKeyToQuery.get(pageKey);
+    paginatedQuery.pageKeyToQuery.delete(pageKey);
+    const pageIndex = paginatedQuery.pageKeys.indexOf(pageKey);
+    paginatedQuery.pageKeys.splice(pageIndex, 1, splitKey1, splitKey2);
+    paginatedQuery.ongoingSplits.delete(pageKey);
+    originalQuery.unsubscribe();
+  }
+  /** The query tokens for all active pages, in result order */
+  activePageQueryTokens(paginatedQuery) {
+    return paginatedQuery.pageKeys.map(
+      (pageKey) => paginatedQuery.pageKeyToQuery.get(pageKey).queryToken
+    );
+  }
+  allQueryTokens(paginatedQuery) {
+    return Array.from(paginatedQuery.pageKeyToQuery.values()).map(
+      (sub) => sub.queryToken
+    );
+  }
+  queryTokenForLastPageOfPaginatedQuery(token) {
+    const paginatedQuery = this.mustGetPaginatedQuery(token);
+    const lastPageKey = paginatedQuery.pageKeys[paginatedQuery.pageKeys.length - 1];
+    if (lastPageKey === void 0) {
+      throw new Error(`No pages for paginated query ${token}`);
+    }
+    return paginatedQuery.pageKeyToQuery.get(lastPageKey).queryToken;
+  }
+  mustGetPaginatedQuery(token) {
+    const paginatedQuery = this.paginatedQuerySet.get(token);
+    if (!paginatedQuery) {
+      throw new Error("paginated query no longer exists for token " + token);
+    }
+    return paginatedQuery;
+  }
 };
-function forwardErrorData(errorData, error) {
-  error.data = jsonToConvex(errorData);
-  return error;
-}
+
+// node_modules/convex/dist/esm/browser/simple_client.js
+var __defProp14 = Object.defineProperty;
+var __defNormalProp13 = (obj, key, value) => key in obj ? __defProp14(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField13 = (obj, key, value) => __defNormalProp13(obj, typeof key !== "symbol" ? key + "" : key, value);
+var defaultWebSocketConstructor;
+var ConvexClient = class {
+  /**
+   * Construct a client and immediately initiate a WebSocket connection to the passed address.
+   *
+   * @public
+   */
+  constructor(address, options = {}) {
+    __publicField13(this, "listeners");
+    __publicField13(this, "_client");
+    __publicField13(this, "_paginatedClient");
+    __publicField13(this, "callNewListenersWithCurrentValuesTimer");
+    __publicField13(this, "_closed");
+    __publicField13(this, "_disabled");
+    if (options.skipConvexDeploymentUrlCheck !== true) {
+      validateDeploymentUrl(address);
+    }
+    const { disabled, ...baseOptions } = options;
+    this._closed = false;
+    this._disabled = !!disabled;
+    if (defaultWebSocketConstructor && !("webSocketConstructor" in baseOptions) && typeof WebSocket === "undefined") {
+      baseOptions.webSocketConstructor = defaultWebSocketConstructor;
+    }
+    if (typeof window === "undefined" && !("unsavedChangesWarning" in baseOptions)) {
+      baseOptions.unsavedChangesWarning = false;
+    }
+    if (!this.disabled) {
+      this._client = new BaseConvexClient(
+        address,
+        () => {
+        },
+        // NOP, let the paginated query client do it all
+        baseOptions
+      );
+      this._paginatedClient = new PaginatedQueryClient(
+        this._client,
+        (transition) => this._transition(transition)
+      );
+    }
+    this.listeners = /* @__PURE__ */ new Set();
+  }
+  /**
+   * Once closed no registered callbacks will fire again.
+   */
+  get closed() {
+    return this._closed;
+  }
+  get client() {
+    if (this._client) return this._client;
+    throw new Error("ConvexClient is disabled");
+  }
+  /**
+   * @internal
+   */
+  get paginatedClient() {
+    if (this._paginatedClient) return this._paginatedClient;
+    throw new Error("ConvexClient is disabled");
+  }
+  get disabled() {
+    return this._disabled;
+  }
+  /**
+   * Call a callback whenever a new result for a query is received. The callback
+   * will run soon after being registered if a result for the query is already
+   * in memory.
+   *
+   * The return value is an {@link Unsubscribe} object which is both a function
+   * an an object with properties. Both of the patterns below work with this object:
+   *
+   *```ts
+   * // call the return value as a function
+   * const unsubscribe = client.onUpdate(api.messages.list, {}, (messages) => {
+   *   console.log(messages);
+   * });
+   * unsubscribe();
+   *
+   * // unpack the return value into its properties
+   * const {
+   *   getCurrentValue,
+   *   unsubscribe,
+   * } = client.onUpdate(api.messages.list, {}, (messages) => {
+   *   console.log(messages);
+   * });
+   *```
+   *
+   * @param query - A {@link server.FunctionReference} for the public query to run.
+   * @param args - The arguments to run the query with.
+   * @param callback - Function to call when the query result updates.
+   * @param onError - Function to call when the query result updates with an error.
+   * If not provided, errors will be thrown instead of calling the callback.
+   *
+   * @return an {@link Unsubscribe} function to stop calling the onUpdate function.
+   */
+  onUpdate(query, args, callback, onError) {
+    if (this.disabled) {
+      return this.createDisabledUnsubscribe();
+    }
+    const { queryToken, unsubscribe } = this.client.subscribe(
+      getFunctionName(query),
+      args
+    );
+    const queryInfo = {
+      queryToken,
+      callback,
+      onError,
+      unsubscribe,
+      hasEverRun: false,
+      query,
+      args,
+      paginationOptions: void 0
+    };
+    this.listeners.add(queryInfo);
+    if (this.queryResultReady(queryToken) && this.callNewListenersWithCurrentValuesTimer === void 0) {
+      this.callNewListenersWithCurrentValuesTimer = setTimeout(
+        () => this.callNewListenersWithCurrentValues(),
+        0
+      );
+    }
+    const unsubscribeProps = {
+      unsubscribe: () => {
+        if (this.closed) {
+          return;
+        }
+        this.listeners.delete(queryInfo);
+        unsubscribe();
+      },
+      getCurrentValue: () => this.client.localQueryResultByToken(queryToken),
+      getQueryLogs: () => this.client.localQueryLogs(queryToken)
+    };
+    const ret = unsubscribeProps.unsubscribe;
+    Object.assign(ret, unsubscribeProps);
+    return ret;
+  }
+  /**
+   * Call a callback whenever a new result for a paginated query is received.
+   *
+   * This is an experimental preview: the final API may change.
+   * In particular, caching behavior, page splitting, and required paginated query options
+   * may change.
+   *
+   * @param query - A {@link server.FunctionReference} for the public query to run.
+   * @param args - The arguments to run the query with.
+   * @param options - Options for the paginated query including initialNumItems and id.
+   * @param callback - Function to call when the query result updates.
+   * @param onError - Function to call when the query result updates with an error.
+   *
+   * @return an {@link Unsubscribe} function to stop calling the callback.
+   */
+  onPaginatedUpdate_experimental(query, args, options, callback, onError) {
+    if (this.disabled) {
+      return this.createDisabledUnsubscribe();
+    }
+    const paginationOptions = {
+      initialNumItems: options.initialNumItems,
+      id: -1
+    };
+    const { paginatedQueryToken, unsubscribe } = this.paginatedClient.subscribe(
+      getFunctionName(query),
+      args,
+      // Simple client doesn't use IDs, there's no expectation that these queries remain separate.
+      paginationOptions
+    );
+    const queryInfo = {
+      queryToken: paginatedQueryToken,
+      callback,
+      onError,
+      unsubscribe,
+      hasEverRun: false,
+      query,
+      args,
+      paginationOptions
+    };
+    this.listeners.add(queryInfo);
+    if (!!this.paginatedClient.localQueryResultByToken(paginatedQueryToken) && this.callNewListenersWithCurrentValuesTimer === void 0) {
+      this.callNewListenersWithCurrentValuesTimer = setTimeout(
+        () => this.callNewListenersWithCurrentValues(),
+        0
+      );
+    }
+    const unsubscribeProps = {
+      unsubscribe: () => {
+        if (this.closed) {
+          return;
+        }
+        this.listeners.delete(queryInfo);
+        unsubscribe();
+      },
+      getCurrentValue: () => {
+        const result = this.paginatedClient.localQueryResult(
+          getFunctionName(query),
+          args,
+          paginationOptions
+        );
+        return result;
+      },
+      getQueryLogs: () => []
+      // Paginated queries don't aggregate their logs
+    };
+    const ret = unsubscribeProps.unsubscribe;
+    Object.assign(ret, unsubscribeProps);
+    return ret;
+  }
+  // Run all callbacks that have never been run before if they have a query
+  // result available now.
+  callNewListenersWithCurrentValues() {
+    this.callNewListenersWithCurrentValuesTimer = void 0;
+    this._transition({ queries: [], paginatedQueries: [] }, true);
+  }
+  queryResultReady(queryToken) {
+    return this.client.hasLocalQueryResultByToken(queryToken);
+  }
+  createDisabledUnsubscribe() {
+    const disabledUnsubscribe = (() => {
+    });
+    const unsubscribeProps = {
+      unsubscribe: disabledUnsubscribe,
+      getCurrentValue: () => void 0,
+      getQueryLogs: () => void 0
+    };
+    Object.assign(disabledUnsubscribe, unsubscribeProps);
+    return disabledUnsubscribe;
+  }
+  async close() {
+    if (this.disabled) return;
+    this.listeners.clear();
+    this._closed = true;
+    if (this._paginatedClient) {
+      this._paginatedClient = void 0;
+    }
+    return this.client.close();
+  }
+  /**
+   * Get the current JWT auth token and decoded claims.
+   */
+  getAuth() {
+    if (this.disabled) return;
+    return this.client.getCurrentAuthClaims();
+  }
+  /**
+   * Set the authentication token to be used for subsequent queries and mutations.
+   * `fetchToken` will be called automatically again if a token expires.
+   * `fetchToken` should return `null` if the token cannot be retrieved, for example
+   * when the user's rights were permanently revoked.
+   * @param fetchToken - an async function returning the JWT (typically an OpenID Connect Identity Token)
+   * @param onChange - a callback that will be called when the authentication status changes
+   */
+  setAuth(fetchToken, onChange) {
+    if (this.disabled) return;
+    this.client.setAuth(
+      fetchToken,
+      onChange ?? (() => {
+      })
+    );
+  }
+  /**
+   * @internal
+   */
+  setAdminAuth(token, identity) {
+    if (this.closed) {
+      throw new Error("ConvexClient has already been closed.");
+    }
+    if (this.disabled) return;
+    this.client.setAdminAuth(token, identity);
+  }
+  /**
+   * @internal
+   */
+  _transition({
+    queries,
+    paginatedQueries
+  }, callNewListeners = false) {
+    const updatedQueries = [
+      ...queries.map((q2) => q2.token),
+      ...paginatedQueries.map((q2) => q2.token)
+    ];
+    for (const queryInfo of this.listeners) {
+      const { callback, queryToken, onError, hasEverRun } = queryInfo;
+      const isPaginatedQuery = serializedQueryTokenIsPaginated(queryToken);
+      const hasResultReady = isPaginatedQuery ? !!this.paginatedClient.localQueryResultByToken(queryToken) : this.client.hasLocalQueryResultByToken(queryToken);
+      if (updatedQueries.includes(queryToken) || callNewListeners && !hasEverRun && hasResultReady) {
+        queryInfo.hasEverRun = true;
+        let newValue;
+        try {
+          if (isPaginatedQuery) {
+            newValue = this.paginatedClient.localQueryResultByToken(queryToken);
+          } else {
+            newValue = this.client.localQueryResultByToken(queryToken);
+          }
+        } catch (error) {
+          if (!(error instanceof Error)) throw error;
+          if (onError) {
+            onError(
+              error,
+              "Second argument to onUpdate onError is reserved for later use"
+            );
+          } else {
+            void Promise.reject(error);
+          }
+          continue;
+        }
+        callback(
+          newValue,
+          "Second argument to onUpdate callback is reserved for later use"
+        );
+      }
+    }
+  }
+  /**
+   * Execute a mutation function.
+   *
+   * @param mutation - A {@link server.FunctionReference} for the public mutation
+   * to run.
+   * @param args - An arguments object for the mutation.
+   * @param options - A {@link MutationOptions} options object for the mutation.
+   * @returns A promise of the mutation's result.
+   */
+  async mutation(mutation, args, options) {
+    if (this.disabled) throw new Error("ConvexClient is disabled");
+    return await this.client.mutation(getFunctionName(mutation), args, options);
+  }
+  /**
+   * Execute an action function.
+   *
+   * @param action - A {@link server.FunctionReference} for the public action
+   * to run.
+   * @param args - An arguments object for the action.
+   * @returns A promise of the action's result.
+   */
+  async action(action, args) {
+    if (this.disabled) throw new Error("ConvexClient is disabled");
+    return await this.client.action(getFunctionName(action), args);
+  }
+  /**
+   * Fetch a query result once.
+   *
+   * @param query - A {@link server.FunctionReference} for the public query
+   * to run.
+   * @param args - An arguments object for the query.
+   * @returns A promise of the query's result.
+   */
+  async query(query, args) {
+    if (this.disabled) throw new Error("ConvexClient is disabled");
+    const value = this.client.localQueryResult(getFunctionName(query), args);
+    if (value !== void 0) return Promise.resolve(value);
+    return new Promise((resolve, reject) => {
+      const { unsubscribe } = this.onUpdate(
+        query,
+        args,
+        (value2) => {
+          unsubscribe();
+          resolve(value2);
+        },
+        (e3) => {
+          unsubscribe();
+          reject(e3);
+        }
+      );
+    });
+  }
+  /**
+   * Get the current {@link ConnectionState} between the client and the Convex
+   * backend.
+   *
+   * @returns The {@link ConnectionState} with the Convex backend.
+   */
+  connectionState() {
+    if (this.disabled) throw new Error("ConvexClient is disabled");
+    return this.client.connectionState();
+  }
+  /**
+   * Subscribe to the {@link ConnectionState} between the client and the Convex
+   * backend, calling a callback each time it changes.
+   *
+   * Subscribed callbacks will be called when any part of ConnectionState changes.
+   * ConnectionState may grow in future versions (e.g. to provide a array of
+   * inflight requests) in which case callbacks would be called more frequently.
+   *
+   * @returns An unsubscribe function to stop listening.
+   */
+  subscribeToConnectionState(cb) {
+    if (this.disabled) return () => {
+    };
+    return this.client.subscribeToConnectionState(cb);
+  }
+};
 
 // node_modules/@auth0/auth0-spa-js/dist/auth0-spa-js.production.esm.js
 function e(e3, t2) {
@@ -6297,21 +9239,21 @@ function createChildComponents(root, pathParts) {
 var componentsGeneric = () => createChildComponents("components", []);
 
 // node_modules/convex/dist/esm/server/schema.js
-var __defProp6 = Object.defineProperty;
-var __defNormalProp6 = (obj, key, value) => key in obj ? __defProp6(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField6 = (obj, key, value) => __defNormalProp6(obj, typeof key !== "symbol" ? key + "" : key, value);
+var __defProp15 = Object.defineProperty;
+var __defNormalProp14 = (obj, key, value) => key in obj ? __defProp15(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField14 = (obj, key, value) => __defNormalProp14(obj, typeof key !== "symbol" ? key + "" : key, value);
 var TableDefinition = class {
   /**
    * @internal
    */
   constructor(documentType) {
-    __publicField6(this, "indexes");
-    __publicField6(this, "stagedDbIndexes");
-    __publicField6(this, "searchIndexes");
-    __publicField6(this, "stagedSearchIndexes");
-    __publicField6(this, "vectorIndexes");
-    __publicField6(this, "stagedVectorIndexes");
-    __publicField6(this, "validator");
+    __publicField14(this, "indexes");
+    __publicField14(this, "stagedDbIndexes");
+    __publicField14(this, "searchIndexes");
+    __publicField14(this, "stagedSearchIndexes");
+    __publicField14(this, "vectorIndexes");
+    __publicField14(this, "stagedVectorIndexes");
+    __publicField14(this, "validator");
     this.indexes = [];
     this.stagedDbIndexes = [];
     this.searchIndexes = [];
@@ -6426,9 +9368,9 @@ var SchemaDefinition = class {
    * @internal
    */
   constructor(tables, options) {
-    __publicField6(this, "tables");
-    __publicField6(this, "strictTableNameTypes");
-    __publicField6(this, "schemaValidation");
+    __publicField14(this, "tables");
+    __publicField14(this, "strictTableNameTypes");
+    __publicField14(this, "schemaValidation");
     this.tables = tables;
     this.schemaValidation = options?.schemaValidation === void 0 ? true : options.schemaValidation;
   }
@@ -6660,148 +9602,6 @@ var formatters = {
   })
 };
 
-// src/state/selectors.ts
-function cloneTask(task) {
-  return {
-    ...task,
-    tags: task.tags.map((tag) => ({ ...tag })),
-    subtasks: task.subtasks.map((subtask) => ({ ...subtask }))
-  };
-}
-function cloneProject(project) {
-  return {
-    ...project,
-    bayMessages: project.bayMessages.map((message) => ({
-      ...message,
-      tasks: message.tasks.map((task) => ({ ...task }))
-    }))
-  };
-}
-function decorateTask(state2, task) {
-  const project = task.projectId ? getProject(state2, task.projectId) : null;
-  return {
-    ...task,
-    projectName: project?.name || "inbox"
-  };
-}
-function getInboxTasks(state2) {
-  return state2.tasks.filter((task) => task.status === "todo" && !task.dueAt && !task.projectId).map((task) => decorateTask(state2, task));
-}
-function getTask(state2, taskId) {
-  const task = state2.tasks.find((task2) => task2.id === taskId);
-  return task ? decorateTask(state2, task) : null;
-}
-function getSelectedTask(state2) {
-  return state2.modalTaskId ? getTask(state2, state2.modalTaskId) : null;
-}
-function getTaskDueMeta(task) {
-  if (!task.dueAt) {
-    return {
-      label: null,
-      longLabel: "unscheduled",
-      tone: "none",
-      diff: null,
-      date: null
-    };
-  }
-  const date = parseLocalISODate(task.dueAt);
-  const diff = diffInDays(date, TODAY);
-  let label = formatters.monthDay.format(date);
-  let longLabel = formatters.modalDate.format(date);
-  let tone = "upcoming";
-  if (diff === 0) {
-    label = "Today";
-    longLabel = "today";
-    tone = "today";
-  } else if (diff === 1) {
-    label = "Tomorrow";
-    longLabel = "tomorrow";
-  } else if (diff === -1) {
-    label = "Yesterday";
-    longLabel = "yesterday";
-    tone = "overdue";
-  } else if (diff < -1) {
-    tone = "overdue";
-  } else if (diff > 1 && diff <= 6) {
-    label = formatters.weekdayLong.format(date);
-  }
-  return { label, longLabel, tone, diff, date };
-}
-function getTodayTasks(state2) {
-  return state2.tasks.filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff <= 0).map((task) => decorateTask(state2, task));
-}
-function getCompletedTasks(state2) {
-  return [...state2.tasks].filter((task) => task.status === "completed").map((task) => decorateTask(state2, task));
-}
-function getInboxCount(state2) {
-  return getInboxTasks(state2).length;
-}
-function getFutureTodoTasks(state2) {
-  return state2.tasks.filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff > 0).map((task) => decorateTask(state2, task));
-}
-function getUpcomingSectionKey(date) {
-  const diff = diffInDays(date, TODAY);
-  if (diff === 1) return "tomorrow";
-  if (date <= endOfWeekSunday(TODAY)) return "this-week";
-  return "later";
-}
-function getUpcomingGroups(state2) {
-  const groups = {
-    tomorrow: [],
-    "this-week": [],
-    later: []
-  };
-  getFutureTodoTasks(state2).forEach((task) => {
-    groups[getUpcomingSectionKey(parseLocalISODate(task.dueAt))].push(task);
-  });
-  return groups;
-}
-function getWeekDays(state2, weekStartIso) {
-  const weekStart = parseLocalISODate(weekStartIso);
-  const futureTasks = getFutureTodoTasks(state2);
-  return Array.from({ length: 7 }, (_2, index) => {
-    const date = addDays(weekStart, index);
-    const iso = toLocalISODate(date);
-    return {
-      date,
-      iso,
-      hasTasks: futureTasks.some((task) => task.dueAt === iso),
-      isToday: iso === TODAY_ISO,
-      isSelected: iso === state2.selectedUpcomingDate
-    };
-  });
-}
-function getDateFromInboxDestination(destination) {
-  if (destination === "today") return TODAY_ISO;
-  if (destination === "tomorrow") return toLocalISODate(addDays(TODAY, 1));
-  if (destination === "next-week") return toLocalISODate(addDays(startOfWeekMonday(TODAY), 7));
-  return toLocalISODate(addDays(TODAY, 30));
-}
-function getInboxSeedTasks(initialTasks2) {
-  return initialTasks2.filter((task) => task.status === "todo" && !task.dueAt && !task.projectId).map(cloneTask);
-}
-function getProjects(state2) {
-  return [...state2.projects];
-}
-function getProject(state2, projectId) {
-  return state2.projects.find((project) => project.id === projectId) || null;
-}
-function getSelectedProject(state2) {
-  return state2.selectedProjectId ? getProject(state2, state2.selectedProjectId) : null;
-}
-function getProjectTasks(state2, projectId) {
-  return state2.tasks.filter((task) => task.projectId === projectId && task.status === "todo").map((task) => decorateTask(state2, task));
-}
-function getProjectCompletedTasks(state2, projectId) {
-  return state2.tasks.filter((task) => task.projectId === projectId && task.status === "completed").map((task) => decorateTask(state2, task));
-}
-function getCurrentAssistantMessages(state2) {
-  if (state2.currentView === "project") {
-    return getSelectedProject(state2)?.bayMessages || [];
-  }
-  return state2.messagesByView[state2.currentView] || [];
-}
-
 // src/state/project-bay.ts
 var QUESTION_COPY = {
   outcome: "what needs to be true for this project to feel successful?",
@@ -6828,9 +9628,10 @@ function countFilledAnswers(answers) {
 function isPastDate(value) {
   return parseLocalISODate(value).getTime() < TODAY.getTime();
 }
-function createProjectSetupState(open = false) {
+function createProjectSetupState(open = false, previousView = "today") {
   return {
     open,
+    previousView,
     phase: "chat",
     promptKey: "name",
     messages: open ? [createMessage("assistant", "let's turn this into a real plan. what's the project name?")] : [],
@@ -6861,13 +9662,6 @@ function cloneProjectDraft(draft) {
     ...draft,
     tasks: draft.tasks.map((task) => ({ ...task }))
   };
-}
-function slugifyProjectName(value) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
-}
-function buildProjectId(name, nextProjectId) {
-  const slug = slugifyProjectName(name) || `project-${nextProjectId}`;
-  return `project-${slug}-${nextProjectId}`;
 }
 function parseProjectDeadlineInput(value) {
   const text = value.trim().toLowerCase();
@@ -7041,57 +9835,6 @@ function submitProjectSetupMessage(projectSetup, rawText) {
 }
 
 // src/state/actions.ts
-function addTask(state2, title) {
-  const isInbox = state2.currentView === "inbox";
-  const isProject = state2.currentView === "project" && state2.selectedProjectId;
-  state2.tasks.unshift({
-    id: `task-${state2.nextTaskId++}`,
-    title,
-    status: "todo",
-    dueAt: isInbox || isProject ? null : TODAY_ISO,
-    projectId: isProject ? state2.selectedProjectId : null,
-    tags: [{ label: "new", color: "emerald" }],
-    description: isInbox ? "New inbox item waiting to be triaged." : isProject ? "New project task added from the project view." : "New task added from the quick entry field. Open it to add more detail.",
-    sourceLabel: null,
-    isStale: false,
-    project: isProject ? "project" : "inbox",
-    priority: "none",
-    createdLabel: "created just now",
-    subtasks: []
-  });
-}
-function scheduleInboxTask(state2, taskId, destination) {
-  const dueAt = getDateFromInboxDestination(destination);
-  state2.tasks = state2.tasks.map((task) => {
-    if (task.id !== taskId) return task;
-    return {
-      ...task,
-      dueAt,
-      sourceLabel: null,
-      isStale: false
-    };
-  });
-}
-function unscheduleTask(state2, taskId, previousDueAt) {
-  state2.tasks = state2.tasks.map((task) => {
-    if (task.id !== taskId) return task;
-    return { ...task, dueAt: previousDueAt };
-  });
-}
-function toggleTask(state2, taskId) {
-  cancelTaskCardEdit(state2);
-  const index = state2.tasks.findIndex((task2) => task2.id === taskId);
-  if (index === -1) return;
-  const task = { ...state2.tasks[index] };
-  state2.tasks.splice(index, 1);
-  if (task.status === "todo") {
-    task.status = "completed";
-    state2.tasks.push(task);
-  } else {
-    task.status = "todo";
-    state2.tasks.unshift(task);
-  }
-}
 function openTaskModal(state2, taskId) {
   cancelTaskCardEdit(state2);
   state2.modalTaskId = taskId;
@@ -7102,38 +9845,6 @@ function closeTaskModal(state2) {
   state2.modalTaskId = null;
   state2.modalSubtaskComposerOpen = false;
   state2.modalSubtaskDraft = "";
-}
-function updateTaskField(state2, taskId, field, value) {
-  state2.tasks = state2.tasks.map(
-    (task) => task.id === taskId ? { ...task, [field]: value } : task
-  );
-}
-function updateTaskProject(state2, taskId, projectId) {
-  const nextProjectId = projectId || null;
-  const project = nextProjectId ? state2.projects.find((item) => item.id === nextProjectId) || null : null;
-  state2.tasks = state2.tasks.map(
-    (task) => task.id === taskId ? {
-      ...task,
-      projectId: nextProjectId,
-      project: project?.name || "inbox"
-    } : task
-  );
-}
-function updateTaskDueDate(state2, taskId, dueAt) {
-  state2.tasks = state2.tasks.map(
-    (task) => task.id === taskId ? {
-      ...task,
-      dueAt: dueAt || null
-    } : task
-  );
-}
-function updateTaskPriority(state2, taskId, priority) {
-  state2.tasks = state2.tasks.map(
-    (task) => task.id === taskId ? {
-      ...task,
-      priority: priority || "none"
-    } : task
-  );
 }
 function startTaskCardEdit(state2, taskId) {
   const task = state2.tasks.find((item) => item.id === taskId);
@@ -7151,84 +9862,9 @@ function updateTaskCardDraftField(state2, field, value) {
     [field]: value
   };
 }
-function saveTaskCardEdit(state2) {
-  if (!state2.editingTaskId || !state2.editingTaskDraft) return;
-  const { title, description } = state2.editingTaskDraft;
-  const trimmedTitle = title.trim();
-  if (!trimmedTitle) return;
-  state2.tasks = state2.tasks.map(
-    (task) => task.id === state2.editingTaskId ? {
-      ...task,
-      title: trimmedTitle,
-      description: description.trim()
-    } : task
-  );
-  cancelTaskCardEdit(state2);
-}
 function cancelTaskCardEdit(state2) {
   state2.editingTaskId = null;
   state2.editingTaskDraft = null;
-}
-function toggleSubtask(state2, taskId, subtaskId) {
-  state2.tasks = state2.tasks.map((task) => {
-    if (task.id !== taskId) return task;
-    return {
-      ...task,
-      subtasks: task.subtasks.map(
-        (subtask) => subtask.id === subtaskId ? { ...subtask, done: !subtask.done } : subtask
-      )
-    };
-  });
-}
-function addTaskSubtask(state2, taskId, title) {
-  const trimmedTitle = title.trim();
-  if (!trimmedTitle) return;
-  state2.tasks = state2.tasks.map((task) => {
-    if (task.id !== taskId) return task;
-    return {
-      ...task,
-      subtasks: [
-        ...task.subtasks,
-        {
-          id: `subtask-${state2.nextSubtaskId++}`,
-          title: trimmedTitle,
-          done: false
-        }
-      ]
-    };
-  });
-  state2.modalSubtaskComposerOpen = false;
-  state2.modalSubtaskDraft = "";
-}
-function updateSubtaskTitle(state2, taskId, subtaskId, value) {
-  state2.tasks = state2.tasks.map((task) => {
-    if (task.id !== taskId) return task;
-    return {
-      ...task,
-      subtasks: task.subtasks.map(
-        (subtask) => subtask.id === subtaskId ? { ...subtask, title: value } : subtask
-      )
-    };
-  });
-}
-function removeSubtask(state2, taskId, subtaskId) {
-  state2.tasks = state2.tasks.map((task) => {
-    if (task.id !== taskId) return task;
-    return {
-      ...task,
-      subtasks: task.subtasks.filter((subtask) => subtask.id !== subtaskId)
-    };
-  });
-}
-function reorderTask(state2, taskId, targetTaskId, placement = "before") {
-  if (!taskId || !targetTaskId || taskId === targetTaskId) return;
-  const fromIndex = state2.tasks.findIndex((task) => task.id === taskId);
-  const targetIndex = state2.tasks.findIndex((task) => task.id === targetTaskId);
-  if (fromIndex === -1 || targetIndex === -1) return;
-  const [movedTask] = state2.tasks.splice(fromIndex, 1);
-  const nextTargetIndex = state2.tasks.findIndex((task) => task.id === targetTaskId);
-  const insertIndex = placement === "after" ? nextTargetIndex + 1 : nextTargetIndex;
-  state2.tasks.splice(insertIndex, 0, movedTask);
 }
 function openModalSubtaskComposer(state2) {
   state2.modalSubtaskComposerOpen = true;
@@ -7249,13 +9885,6 @@ function setView(state2, view) {
     state2.selectedProjectId = null;
   }
   return true;
-}
-function resetInbox(state2, initialTasks2) {
-  cancelTaskCardEdit(state2);
-  const preservedTasks = state2.tasks.filter(
-    (task) => task.status !== "todo" || task.dueAt || task.projectId
-  );
-  state2.tasks = [...getInboxSeedTasks(initialTasks2), ...preservedTasks];
 }
 function shiftUpcomingWeek(state2, direction) {
   cancelTaskCardEdit(state2);
@@ -7278,13 +9907,34 @@ function openProject(state2, projectId) {
   state2.selectedProjectId = projectId;
 }
 function openProjectSetup(state2) {
-  state2.projectSetup = createProjectSetupState(true);
+  cancelTaskCardEdit(state2);
+  const previousView = state2.currentView === "project-setup" ? state2.projectSetup.previousView || "today" : state2.currentView;
+  if (state2.projectSetup.open) {
+    state2.projectSetup = {
+      ...state2.projectSetup,
+      open: true,
+      previousView
+    };
+  } else {
+    state2.projectSetup = createProjectSetupState(true, previousView);
+  }
+  state2.currentView = "project-setup";
 }
 function closeProjectSetup(state2) {
-  state2.projectSetup = createProjectSetupState(false);
+  const previousView = state2.projectSetup.previousView || "today";
+  state2.projectSetup = createProjectSetupState(false, previousView);
+  if (state2.currentView === "project-setup") {
+    if (previousView === "project" && state2.selectedProjectId) {
+      state2.currentView = "project";
+    } else {
+      state2.currentView = previousView === "project-setup" ? "today" : previousView;
+    }
+  }
 }
 function restartProjectSetup(state2) {
-  state2.projectSetup = createProjectSetupState(true);
+  const previousView = state2.projectSetup.previousView || "today";
+  state2.projectSetup = createProjectSetupState(true, previousView);
+  state2.currentView = "project-setup";
 }
 function submitProjectSetupInput(state2, text) {
   state2.projectSetup = submitProjectSetupMessage(state2.projectSetup, text);
@@ -7318,51 +9968,6 @@ function updateProjectDraftTask(state2, taskId, value) {
   }
   state2.projectSetup.draft = draft;
 }
-function confirmProjectDraft(state2) {
-  const draft = state2.projectSetup.draft;
-  if (!draft) return;
-  const resolvedDeadline = parseProjectDeadlineInput(draft.deadline) || draft.deadline;
-  const projectId = buildProjectId(draft.name, state2.nextProjectId++);
-  const bayMessages = state2.projectSetup.messages.map((message) => ({
-    ...message,
-    tasks: message.tasks.map((task) => ({ ...task }))
-  }));
-  bayMessages.push({
-    sender: "assistant",
-    text: `project created. start with: ${draft.nextStep.toLowerCase()}.`,
-    rich: false,
-    tasks: []
-  });
-  state2.projects.unshift({
-    id: projectId,
-    name: draft.name,
-    deadline: resolvedDeadline,
-    summary: draft.summary,
-    nextStep: draft.nextStep,
-    bayMessages,
-    createdLabel: "created just now"
-  });
-  const createdTasks = draft.tasks.map((task, index) => ({
-    id: `task-${state2.nextTaskId++}`,
-    title: task.title,
-    status: "todo",
-    dueAt: index === 0 ? TODAY_ISO : null,
-    projectId,
-    tags: [],
-    description: task.description || "",
-    sourceLabel: null,
-    isStale: false,
-    project: draft.name,
-    priority: index === 0 ? "high" : "medium",
-    createdLabel: "created just now",
-    subtasks: []
-  }));
-  state2.tasks = [...createdTasks, ...state2.tasks];
-  state2.projectSetup = createProjectSetupState(false);
-  state2.currentView = "project";
-  state2.selectedProjectId = projectId;
-  state2.assistantOpen = true;
-}
 
 // src/utils/text.ts
 function escapeHtml(value) {
@@ -7371,6 +9976,142 @@ function escapeHtml(value) {
 function ordinalLabel(index) {
   const labels = ["1st", "2nd", "3rd", "4th", "5th"];
   return labels[index] || `${index + 1}th`;
+}
+
+// src/state/selectors.ts
+function getCreatedLabel(createdAt) {
+  if (!createdAt) return "added recently";
+  const diffMs = TODAY.getTime() - new Date(createdAt).getTime();
+  const hours = Math.round(diffMs / (60 * 60 * 1e3));
+  if (hours <= 0) return "added just now";
+  if (hours === 1) return "added 1 hour ago";
+  if (hours < 24) return `added ${hours} hours ago`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return "added yesterday";
+  if (days < 7) return `added ${days} days ago`;
+  return "added recently";
+}
+function decorateTask(state2, task) {
+  const project = task.projectId ? getProject(state2, task.projectId) : null;
+  return {
+    ...task,
+    projectName: project?.name || "inbox",
+    createdLabel: getCreatedLabel(task.createdAt)
+  };
+}
+function getInboxTasks(state2) {
+  return state2.tasks.filter((task) => task.status === "todo" && !task.dueAt && !task.projectId).map((task) => decorateTask(state2, task));
+}
+function getTask(state2, taskId) {
+  const task = state2.tasks.find((task2) => task2.id === taskId);
+  return task ? decorateTask(state2, task) : null;
+}
+function getSelectedTask(state2) {
+  return state2.modalTaskId ? getTask(state2, state2.modalTaskId) : null;
+}
+function getTaskDueMeta(task) {
+  if (!task.dueAt) {
+    return {
+      label: null,
+      longLabel: "unscheduled",
+      tone: "none",
+      diff: null,
+      date: null
+    };
+  }
+  const date = parseLocalISODate(task.dueAt);
+  const diff = diffInDays(date, TODAY);
+  let label = formatters.monthDay.format(date);
+  let longLabel = formatters.modalDate.format(date);
+  let tone = "upcoming";
+  if (diff === 0) {
+    label = "Today";
+    longLabel = "today";
+    tone = "today";
+  } else if (diff === 1) {
+    label = "Tomorrow";
+    longLabel = "tomorrow";
+  } else if (diff === -1) {
+    label = "Yesterday";
+    longLabel = "yesterday";
+    tone = "overdue";
+  } else if (diff < -1) {
+    tone = "overdue";
+  } else if (diff > 1 && diff <= 6) {
+    label = formatters.weekdayLong.format(date);
+  }
+  return { label, longLabel, tone, diff, date };
+}
+function getTodayTasks(state2) {
+  return state2.tasks.filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff <= 0).map((task) => decorateTask(state2, task));
+}
+function getCompletedTasks(state2) {
+  return [...state2.tasks].filter((task) => task.status === "completed").map((task) => decorateTask(state2, task));
+}
+function getInboxCount(state2) {
+  return getInboxTasks(state2).length;
+}
+function getFutureTodoTasks(state2) {
+  return state2.tasks.filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff > 0).map((task) => decorateTask(state2, task));
+}
+function getUpcomingSectionKey(date) {
+  const diff = diffInDays(date, TODAY);
+  if (diff === 1) return "tomorrow";
+  if (date <= endOfWeekSunday(TODAY)) return "this-week";
+  return "later";
+}
+function getUpcomingGroups(state2) {
+  const groups = {
+    tomorrow: [],
+    "this-week": [],
+    later: []
+  };
+  getFutureTodoTasks(state2).forEach((task) => {
+    groups[getUpcomingSectionKey(parseLocalISODate(task.dueAt))].push(task);
+  });
+  return groups;
+}
+function getWeekDays(state2, weekStartIso) {
+  const weekStart = parseLocalISODate(weekStartIso);
+  const futureTasks = getFutureTodoTasks(state2);
+  return Array.from({ length: 7 }, (_2, index) => {
+    const date = addDays(weekStart, index);
+    const iso = toLocalISODate(date);
+    return {
+      date,
+      iso,
+      hasTasks: futureTasks.some((task) => task.dueAt === iso),
+      isToday: iso === TODAY_ISO,
+      isSelected: iso === state2.selectedUpcomingDate
+    };
+  });
+}
+function getDateFromInboxDestination(destination) {
+  if (destination === "today") return TODAY_ISO;
+  if (destination === "tomorrow") return toLocalISODate(addDays(TODAY, 1));
+  if (destination === "next-week") return toLocalISODate(addDays(startOfWeekMonday(TODAY), 7));
+  return toLocalISODate(addDays(TODAY, 30));
+}
+function getProjects(state2) {
+  return [...state2.projects];
+}
+function getProject(state2, projectId) {
+  return state2.projects.find((project) => project.id === projectId) || null;
+}
+function getSelectedProject(state2) {
+  return state2.selectedProjectId ? getProject(state2, state2.selectedProjectId) : null;
+}
+function getProjectTasks(state2, projectId) {
+  return state2.tasks.filter((task) => task.projectId === projectId && task.status === "todo").map((task) => decorateTask(state2, task));
+}
+function getProjectCompletedTasks(state2, projectId) {
+  return state2.tasks.filter((task) => task.projectId === projectId && task.status === "completed").map((task) => decorateTask(state2, task));
+}
+function getCurrentAssistantMessages(state2) {
+  if (state2.currentView === "project") {
+    return state2.selectedProjectId ? state2.projectMessagesByProjectId[state2.selectedProjectId] || [] : [];
+  }
+  return state2.messagesByView[state2.currentView] || [];
 }
 
 // src/state/assistant-replies.ts
@@ -7534,342 +10275,20 @@ function buildAssistantReply({ view, text, state: state2, assistantConfigs: assi
   return buildTodayReply(text, state2, assistantConfigs2);
 }
 
-// src/data/projects.ts
-function createProject(id, name, offsetDays, summary, nextStep, createdLabel) {
-  return {
-    id,
-    name,
-    deadline: toLocalISODate(addDays(TODAY, offsetDays)),
-    summary,
-    nextStep,
-    createdLabel,
-    bayMessages: [
-      {
-        sender: "assistant",
-        text: `i'm tracking ${name}. the clearest next move is still: ${nextStep.toLowerCase()}.`,
-        rich: false,
-        tasks: []
-      }
-    ]
-  };
-}
-function buildInitialProjects() {
-  return [
-    createProject(
-      "project-design-system",
-      "design system",
-      4,
-      "Lock the core UI components so product work can move into implementation without reopening design decisions.",
-      "Approve button and input spacing",
-      "created last week"
-    ),
-    createProject(
-      "project-marketing",
-      "marketing",
-      1,
-      "Prepare the next client-facing story with cleaner metrics, sharper positioning, and a clear narrative arc.",
-      "Collect the latest performance metrics",
-      "created 3 days ago"
-    ),
-    createProject(
-      "project-house-reno",
-      "house reno",
-      1,
-      "Keep the renovation moving by resolving schedule risks before material deliveries and installs start drifting.",
-      "List open questions for the contractor",
-      "created 5 days ago"
-    ),
-    createProject(
-      "project-finance",
-      "finance",
-      5,
-      "Close the quarter cleanly and avoid last-minute finance surprises.",
-      "Confirm tax estimate with accountant",
-      "created 2 weeks ago"
-    ),
-    createProject(
-      "project-personal",
-      "personal",
-      16,
-      "Make the holiday travel decision while good routes are still available.",
-      "Compare two preferred itineraries",
-      "created last week"
-    ),
-    createProject(
-      "project-career",
-      "career",
-      38,
-      "Turn broad growth goals into a plan that can actually be reviewed and executed.",
-      "Rewrite the growth goals in measurable terms",
-      "created last month"
-    ),
-    createProject(
-      "project-ops",
-      "ops",
-      2,
-      "Keep routine team operations moving with less last-minute catch-up.",
-      "Collect highlights from each stream",
-      "created recently"
-    )
-  ];
-}
-
-// src/data/tasks.ts
-function buildInitialTasks() {
-  return [
-    {
-      id: "task-1",
-      title: "Review new figma components from the design team",
-      status: "todo",
-      dueAt: null,
-      projectId: null,
-      tags: [{ label: "design system", color: "blue" }],
-      description: "Forwarded for triage before the next product review.",
-      sourceLabel: "forwarded via email",
-      isStale: false,
-      project: "inbox",
-      priority: "none",
-      createdLabel: "created 2 hours ago",
-      subtasks: [
-        {
-          id: "task-1-sub-1",
-          title: "Compare the new button states with production",
-          done: false
-        }
-      ]
-    },
-    {
-      id: "task-2",
-      title: "Brainstorm ideas for Q4 marketing campaign",
-      status: "todo",
-      dueAt: null,
-      projectId: null,
-      tags: [{ label: "marketing", color: "orange" }],
-      description: "Rough capture before it turns into a proper campaign brief.",
-      sourceLabel: null,
-      isStale: false,
-      project: "inbox",
-      priority: "medium",
-      createdLabel: "created yesterday",
-      subtasks: [{ id: "task-2-sub-1", title: "Collect three campaign directions", done: false }]
-    },
-    {
-      id: "task-3",
-      title: "Book flights for the design conference in May",
-      status: "todo",
-      dueAt: null,
-      projectId: null,
-      tags: [],
-      description: "This one has been sitting for a few days and probably needs a decision.",
-      sourceLabel: null,
-      isStale: true,
-      project: "inbox",
-      priority: "medium",
-      createdLabel: "created 3 days ago",
-      subtasks: [{ id: "task-3-sub-1", title: "Check the conference hotel block first", done: false }]
-    },
-    {
-      id: "task-4",
-      title: "Review the new contractor agreements",
-      status: "todo",
-      dueAt: null,
-      projectId: null,
-      tags: [],
-      description: "Fresh inbound admin work that still needs to be placed.",
-      sourceLabel: null,
-      isStale: false,
-      project: "inbox",
-      priority: "high",
-      createdLabel: "created just now",
-      subtasks: [{ id: "task-4-sub-1", title: "Flag any non-standard clauses", done: false }]
-    },
-    {
-      id: "task-5",
-      title: "Draft initial content strategy for Q3",
-      status: "todo",
-      dueAt: toLocalISODate(addDays(TODAY, -1)),
-      projectId: null,
-      tags: [{ label: "strategy", color: "purple" }],
-      description: "Draft the quarter plan, pressure-test the core themes, and line up the first review with the team.",
-      project: "inbox",
-      priority: "none",
-      createdLabel: "created 4 hours ago",
-      subtasks: [
-        { id: "task-5-sub-1", title: "Review last quarter performance notes", done: true },
-        { id: "task-5-sub-2", title: "Outline three campaign themes", done: false },
-        { id: "task-5-sub-3", title: "Prepare review draft for monday", done: false }
-      ]
-    },
-    {
-      id: "task-6",
-      title: "Review agency pitches for rebrand",
-      status: "todo",
-      dueAt: TODAY_ISO,
-      projectId: null,
-      tags: [
-        { label: "marketing", color: "orange" },
-        { label: "meeting", color: null }
-      ],
-      description: "Compare the strongest proposals, note budget tradeoffs, and leave with a shortlist for the next meeting.",
-      project: "inbox",
-      priority: "high",
-      createdLabel: "created 5 hours ago",
-      subtasks: [
-        { id: "task-6-sub-1", title: "Score each proposal against criteria", done: true },
-        { id: "task-6-sub-2", title: "Summarize pricing tradeoffs", done: false },
-        { id: "task-6-sub-3", title: "Draft shortlist recommendation", done: false }
-      ]
-    },
-    {
-      id: "task-7",
-      title: "Update brand voice guidelines based on feedback",
-      status: "todo",
-      dueAt: TODAY_ISO,
-      projectId: null,
-      tags: [{ label: "documentation", color: "blue" }],
-      description: "Fold the latest stakeholder feedback into the guidance so the team can use one consistent voice.",
-      project: "inbox",
-      priority: "medium",
-      createdLabel: "created 1 day ago",
-      subtasks: [
-        { id: "task-7-sub-1", title: "Highlight tone changes from stakeholders", done: false },
-        { id: "task-7-sub-2", title: "Refresh examples section", done: false }
-      ]
-    },
-    {
-      id: "task-8",
-      title: "Prepare slides for client presentation",
-      status: "todo",
-      dueAt: toLocalISODate(addDays(TODAY, 1)),
-      projectId: "project-marketing",
-      tags: [{ label: "marketing", color: "orange" }],
-      description: "Need to incorporate the latest metrics from the Q3 report.",
-      project: "marketing",
-      priority: "high",
-      createdLabel: "created 3 hours ago",
-      subtasks: [
-        { id: "task-8-sub-1", title: "Collect the latest performance metrics", done: false },
-        { id: "task-8-sub-2", title: "Rewrite the executive summary", done: false }
-      ]
-    },
-    {
-      id: "task-9",
-      title: "Call contractor about kitchen timeline",
-      status: "todo",
-      dueAt: toLocalISODate(addDays(TODAY, 1)),
-      projectId: "project-house-reno",
-      tags: [{ label: "house reno", color: null }],
-      description: "Confirm appliance delivery timing and lock the install sequence.",
-      project: "house reno",
-      priority: "medium",
-      createdLabel: "created yesterday",
-      subtasks: [{ id: "task-9-sub-1", title: "List open questions for the contractor", done: false }]
-    },
-    {
-      id: "task-10",
-      title: "Finalize design system components",
-      status: "todo",
-      dueAt: toLocalISODate(addDays(TODAY, 4)),
-      projectId: "project-design-system",
-      tags: [{ label: "design system", color: "blue" }],
-      description: "Buttons, inputs, and modals need to be locked in before dev handoff.",
-      project: "design system",
-      priority: "high",
-      createdLabel: "created yesterday",
-      subtasks: [
-        { id: "task-10-sub-1", title: "Approve button and input spacing", done: false },
-        { id: "task-10-sub-2", title: "Close the modal edge-case review", done: false }
-      ]
-    },
-    {
-      id: "task-11",
-      title: "Pay quarterly taxes",
-      status: "todo",
-      dueAt: toLocalISODate(addDays(TODAY, 5)),
-      projectId: "project-finance",
-      tags: [{ label: "finance", color: null }],
-      description: "Review estimated payment numbers before submitting.",
-      project: "finance",
-      priority: "high",
-      createdLabel: "created 2 days ago",
-      subtasks: [{ id: "task-11-sub-1", title: "Confirm tax estimate with accountant", done: false }]
-    },
-    {
-      id: "task-12",
-      title: "Book flights for holiday trip",
-      status: "todo",
-      dueAt: toLocalISODate(addDays(TODAY, 16)),
-      projectId: "project-personal",
-      tags: [{ label: "personal", color: null }],
-      description: "Prices are starting to move, so lock the best route soon.",
-      project: "personal",
-      priority: "medium",
-      createdLabel: "created 4 days ago",
-      subtasks: [{ id: "task-12-sub-1", title: "Compare two preferred itineraries", done: false }]
-    },
-    {
-      id: "task-13",
-      title: "Review annual performance goals",
-      status: "todo",
-      dueAt: toLocalISODate(addDays(TODAY, 38)),
-      projectId: "project-career",
-      tags: [{ label: "career", color: "purple" }],
-      description: "Tighten the goals before year-end planning begins.",
-      project: "career",
-      priority: "medium",
-      createdLabel: "created last week",
-      subtasks: [
-        { id: "task-13-sub-1", title: "Rewrite the growth goals in measurable terms", done: false }
-      ]
-    },
-    {
-      id: "task-14",
-      title: "Order new office supplies",
-      status: "completed",
-      dueAt: toLocalISODate(addDays(TODAY, -2)),
-      projectId: "project-ops",
-      tags: [],
-      description: "Restock the standard desk setup so the onboarding area is ready for the next new hire.",
-      project: "ops",
-      priority: "none",
-      createdLabel: "created yesterday",
-      subtasks: [{ id: "task-10-sub-1", title: "Restock notebooks and pens", done: true }]
-    },
-    {
-      id: "task-15",
-      title: "Email weekly update to team",
-      status: "completed",
-      dueAt: TODAY_ISO,
-      projectId: "project-ops",
-      tags: [],
-      description: "Send the Friday wrap-up with wins, blockers, and next steps for next week.",
-      project: "ops",
-      priority: "none",
-      createdLabel: "created yesterday",
-      subtasks: [{ id: "task-11-sub-1", title: "Collect highlights from each stream", done: true }]
-    }
-  ];
-}
-
 // src/state/store.ts
 function createStore() {
-  const initialTasks2 = buildInitialTasks();
-  const initialProjects = buildInitialProjects();
-  const initialInboxCount = initialTasks2.filter((task) => task.status === "todo" && !task.dueAt).length;
-  const initialSubtaskCount = initialTasks2.reduce((count, task) => count + task.subtasks.length, 0);
-  const assistantConfigs2 = createAssistantConfigs(initialInboxCount);
+  const assistantConfigs2 = createAssistantConfigs(0);
   return {
-    initialTasks: initialTasks2,
-    initialProjects,
     assistantConfigs: assistantConfigs2,
     state: {
-      tasks: initialTasks2.map(cloneTask),
-      projects: initialProjects.map(cloneProject),
+      tasks: [],
+      projects: [],
       currentView: "inbox",
       selectedProjectId: null,
       upcomingWeekStart: toLocalISODate(startOfWeekMonday(addDays(TODAY, 1))),
       selectedUpcomingDate: toLocalISODate(addDays(TODAY, 1)),
       messagesByView: createInitialMessages(assistantConfigs2),
+      projectMessagesByProjectId: {},
       assistantOpen: true,
       mobileNavOpen: false,
       modalTaskId: null,
@@ -7878,9 +10297,6 @@ function createStore() {
       editingTaskId: null,
       editingTaskDraft: null,
       projectSetup: createProjectSetupState(),
-      nextTaskId: initialTasks2.length + 1,
-      nextSubtaskId: initialSubtaskCount + 1,
-      nextProjectId: initialProjects.length + 1,
       pendingUpcomingScrollTarget: null,
       auth: {
         status: "loading",
@@ -8137,20 +10553,17 @@ function renderInboxTaskRow(task, index = 0, editingDraft = null) {
                 </div>
             </div>
             <div class="xl:ml-auto flex items-center gap-1.5 opacity-100 xl:opacity-0 group-hover:opacity-100 transition-opacity xl:w-auto w-full pl-[38px] xl:pl-0 pt-2 xl:pt-0 border-t border-stone-100 xl:border-none mt-2 xl:mt-0">
-                <button data-action="schedule-task" data-task-id="${task.id}" data-destination="today" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl border border-stone-200 bg-white text-stone-500 hover:text-stone-900 hover:border-stone-400 hover:shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
-                    <svg class="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                <button data-action="schedule-task" data-task-id="${task.id}" data-destination="today" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl bg-stone-900 text-white hover:bg-stone-700 shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                     today
                 </button>
                 <button data-action="schedule-task" data-task-id="${task.id}" data-destination="tomorrow" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl border border-stone-200 bg-white text-stone-500 hover:text-stone-900 hover:border-stone-400 hover:shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
-                    <svg class="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
                     tmrw
                 </button>
                 <button data-action="schedule-task" data-task-id="${task.id}" data-destination="next-week" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl border border-stone-200 bg-white text-stone-500 hover:text-stone-900 hover:border-stone-400 hover:shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
-                    <svg class="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line><path d="m9 16 2 2 4-4"></path></svg>
                     next wk
                 </button>
                 <button data-action="schedule-task" data-task-id="${task.id}" data-destination="later" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl border border-stone-200 bg-white text-stone-500 hover:text-stone-900 hover:border-stone-400 hover:shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
-                    <svg class="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="3" rx="2" ry="2"></rect><rect width="20" height="8" x="2" y="13" rx="2" ry="2"></rect><line x1="8" x2="8" y1="3" y2="11"></line><line x1="8" x2="8" y1="13" y2="21"></line></svg>
                     later
                 </button>
             </div>
@@ -8165,17 +10578,15 @@ function renderInboxView({ inboxTasks, editingTaskId, editingTaskDraft }) {
             <header class="px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8 flex-shrink-0 z-10 bg-white">
                 <h1 class="font-display text-4xl sm:text-5xl tracking-tight lowercase flex items-baseline gap-4">
                     inbox
-                    <span class="text-sm text-stone-400 font-sans font-medium tracking-wider">${countLabel}</span>
+                    <span class="text-sm text-stone-500 font-sans font-medium tracking-wider">${countLabel}</span>
                 </h1>
             </header>
-            ${count ? `
-                <div class="px-4 pb-4 sm:px-6 sm:pb-5 lg:px-10 lg:pb-6 flex-shrink-0 z-10 bg-white">
-                    <div class="group flex items-center gap-3 bg-stone-50 rounded-2xl px-5 py-4 border border-stone-200/60 focus-within:border-stone-400 focus-within:bg-white focus-within:shadow-sm transition-all">
-                        <svg class="w-5 h-5 text-stone-400 group-focus-within:text-stone-900 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        <input id="taskInput" type="text" aria-label="add task to inbox" class="flex-1 bg-transparent border-none outline-none text-[15px] placeholder-stone-400 text-stone-900" placeholder="add to inbox to sort later...">
-                    </div>
+            <div class="px-4 pb-4 sm:px-6 sm:pb-5 lg:px-10 lg:pb-6 flex-shrink-0 z-10 bg-white">
+                <div class="group flex items-center gap-3 bg-stone-50 rounded-2xl px-5 py-4 border border-stone-200/60 focus-within:border-stone-400 focus-within:bg-white focus-within:shadow-sm transition-all">
+                    <svg class="w-5 h-5 text-stone-400 group-focus-within:text-stone-900 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <input id="taskInput" type="text" aria-label="add task to inbox" class="flex-1 bg-transparent border-none outline-none text-[15px] placeholder-stone-400 text-stone-900" placeholder="add to inbox to sort later...">
                 </div>
-            ` : ""}
+            </div>
             <div class="flex-1 overflow-y-auto px-4 pb-24 sm:px-6 sm:pb-10 lg:px-10 flex flex-col relative">
                 ${count ? `
                     <div class="flex flex-col gap-2">
@@ -8194,9 +10605,6 @@ function renderInboxView({ inboxTasks, editingTaskId, editingTaskDraft }) {
                         </div>
                         <h2 class="font-display text-3xl text-stone-900 mb-2 lowercase tracking-tight">inbox zero. nice work.</h2>
                         <p class="text-stone-500 text-sm max-w-[280px] lowercase leading-relaxed">you've triaged all your unscheduled tasks. enjoy the peace of mind.</p>
-                        <button data-action="reset-inbox" class="mt-8 px-6 py-2.5 rounded-xl bg-stone-900 text-white text-sm font-medium hover:scale-105 transition-transform shadow-sm lowercase" type="button">
-                            bring them back
-                        </button>
                     </div>
                 `}
             </div>
@@ -8251,7 +10659,7 @@ function renderTaskModal({
                         ${task.status === "completed" ? "mark incomplete" : "mark complete"}
                     </button>
                     <div class="w-px h-4 bg-stone-200"></div>
-                    <span class="text-[13px] text-stone-400 lowercase">${escapeHtml(task.projectName || "inbox")}</span>
+                    <span class="text-[13px] text-stone-500 lowercase">${escapeHtml(task.projectName || "inbox")}</span>
                 </div>
                 <div class="flex items-center gap-2">
                     <button data-action="close-modal" aria-label="close task details" class="w-8 h-8 flex items-center justify-center rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-900 transition-colors" type="button">
@@ -8265,7 +10673,7 @@ function renderTaskModal({
                         <button data-action="modal-toggle-task" data-task-id="${task.id}" aria-label="${task.status === "completed" ? "mark task incomplete" : "mark task complete"}" class="${task.status === "completed" ? "w-[22px] h-[22px] rounded-full border-2 border-stone-900 bg-stone-900 mt-2 flex items-center justify-center flex-shrink-0" : "w-[22px] h-[22px] rounded-full border-2 border-stone-300 mt-2 flex-shrink-0 cursor-pointer hover:border-stone-400 transition-colors"}" type="button">
                             ${task.status === "completed" ? '<svg class="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ""}
                         </button>
-                        <textarea id="modalTitleInput" data-task-id="${task.id}" aria-label="task title" class="font-display text-3xl text-stone-900 w-full outline-none resize-none bg-transparent placeholder-stone-300 tracking-tight" rows="2" placeholder="task name">${escapeHtml(task.title)}</textarea>
+                        <textarea id="modalTitleInput" data-task-id="${task.id}" aria-label="task title" class="font-display text-3xl text-stone-900 w-full outline-none resize-none bg-transparent placeholder-stone-400 tracking-tight" rows="2" placeholder="task name">${escapeHtml(task.title)}</textarea>
                     </div>
                     <div class="pl-[38px] flex flex-col gap-2">
                         <textarea id="modalDescriptionInput" data-task-id="${task.id}" aria-label="task description" class="w-full bg-transparent text-[15px] leading-relaxed text-stone-600 outline-none resize-none min-h-[100px] placeholder-stone-400" placeholder="add a description...">${escapeHtml(task.description || "")}</textarea>
@@ -8298,7 +10706,7 @@ function renderTaskModal({
                                             </span>
                                         </button>
                                         <input data-action="edit-subtask-title" data-task-id="${task.id}" data-subtask-id="${subtask.id}" aria-label="subtask title" class="flex-1 min-w-0 bg-transparent border-none outline-none p-0 pt-1.5 text-[14px] ${subtask.done ? "text-stone-500 line-through" : "text-stone-800"}" value="${escapeHtml(subtask.title)}">
-                                        <button data-action="remove-subtask" data-task-id="${task.id}" data-subtask-id="${subtask.id}" class="opacity-0 pointer-events-none group-hover/subtask:opacity-100 group-hover/subtask:pointer-events-auto w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-stone-900 transition-all flex-shrink-0" aria-label="remove subtask" type="button">
+                                        <button data-action="remove-subtask" data-task-id="${task.id}" data-subtask-id="${subtask.id}" class="opacity-0 pointer-events-none group-hover/subtask:opacity-100 group-hover/subtask:pointer-events-auto focus:opacity-100 focus:pointer-events-auto w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-stone-900 transition-all flex-shrink-0 touch-action-auto" aria-label="remove subtask" type="button">
                                             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path></svg>
                                         </button>
                                     </div>
@@ -8330,6 +10738,9 @@ function renderTaskModal({
                     </div>
                     <div class="mt-auto pt-6 flex flex-col gap-3 border-t border-stone-200/60">
                         <span class="text-[11px] font-medium text-stone-500 lowercase">${escapeHtml(task.createdLabel || "created recently")}</span>
+                        <button data-action="delete-task" data-task-id="${task.id}" class="w-full px-3 py-2 rounded-xl border border-red-200 text-[13px] font-medium text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors lowercase" type="button">
+                            delete task
+                        </button>
                     </div>
                 </div>
             </div>
@@ -8351,7 +10762,7 @@ function renderNavigation({
   const displayName = authUser?.name || authUser?.email || "logged in";
   const safeDisplayName = escapeHtml(displayName);
   const safeEmail = escapeHtml(authUser?.email || "authenticated");
-  const avatarMarkup = authUser?.picture ? `<img src="${escapeHtml(authUser.picture)}" alt="" class="w-10 h-10 rounded-full object-cover shadow-sm">` : `<div class="w-10 h-10 rounded-full bg-stone-900 text-white flex items-center justify-center font-medium shadow-sm">${displayName.slice(0, 1).toUpperCase()}</div>`;
+  const avatarMarkup = authUser?.picture ? `<img src="${escapeHtml(authUser.picture)}" alt="" loading="lazy" class="w-10 h-10 rounded-full object-cover shadow-sm">` : `<div class="w-10 h-10 rounded-full bg-stone-900 text-white flex items-center justify-center font-medium shadow-sm">${displayName.slice(0, 1).toUpperCase()}</div>`;
   workspaceCard.innerHTML = `
         <div class="bg-white rounded-3xl p-4 shadow-soft flex items-center gap-3 w-full">
             ${avatarMarkup}
@@ -8383,6 +10794,10 @@ function renderNavigation({
   });
   navInboxCount.textContent = String(inboxCount);
   navInboxCount.className = currentView === "inbox" ? "bg-white/20 text-white px-2 py-0.5 rounded-full text-[10px] font-bold transition-all" : "bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all";
+  const addProjectButton = document.querySelector('[data-action="open-project-setup"]');
+  if (addProjectButton) {
+    addProjectButton.className = currentView === "project-setup" ? "w-9 h-9 rounded-full border border-stone-900 bg-stone-900 text-white transition-colors flex items-center justify-center shadow-sm" : "w-9 h-9 rounded-full border border-stone-200 bg-white text-stone-400 hover:text-stone-900 hover:border-stone-400 hover:bg-stone-50 transition-colors flex items-center justify-center";
+  }
   projectNav.innerHTML = projects.map((project) => {
     const isActive = currentView === "project" && selectedProjectId === project.id;
     const deadlineLabel = project.deadline ? project.deadline.slice(5) : "";
@@ -8403,136 +10818,249 @@ function renderNavigation({
   }).join("");
 }
 
-// src/views/project-setup-modal.ts
+// src/views/project-setup-view.ts
+var quickStarters = [
+  "website redesign",
+  "marketing campaign",
+  "event planning",
+  "product launch"
+];
+function formatDraftDeadline(deadline) {
+  if (!deadline) return "add a deadline to shape the starter plan";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) return "use a date like 2026-04-30";
+  return formatters.modalDate.format(parseLocalISODate(deadline)).toLowerCase();
+}
 function renderSetupMessages(messages) {
-  return messages.map((message) => {
-    if (message.sender === "user") {
-      return `
-                    <div class="flex justify-end">
-                        <div class="max-w-[80%] rounded-[20px] rounded-tr-[6px] bg-stone-900 text-white px-4 py-3 text-[14px] leading-relaxed">
+  return messages.map((message, index) => {
+    const isUser = message.sender === "user";
+    return `
+                <div class="flex ${isUser ? "justify-end" : "justify-start"} animate-reveal" style="animation-delay: ${Math.min(index * 60, 320)}ms">
+                    <div class="max-w-[92%] sm:max-w-[80%]">
+                        <div class="mb-1.5 flex items-center gap-2 px-1 text-[11px] font-semibold lowercase tracking-[0.16em] ${isUser ? "justify-end text-stone-400" : "text-stone-500"}">
+                            ${isUser ? "you" : "project copilot"}
+                        </div>
+                        <div class="${isUser ? "rounded-[28px] rounded-tr-[10px] bg-stone-900 text-white shadow-soft" : "rounded-[28px] rounded-tl-[10px] border border-stone-200/80 bg-white text-stone-800 shadow-sm"} px-5 py-4 text-[15px] leading-relaxed">
                             ${escapeHtml(message.text)}
                         </div>
-                    </div>
-                `;
-    }
-    return `
-                <div class="flex justify-start">
-                    <div class="max-w-[88%] rounded-3xl rounded-tl-[6px] bg-stone-100 border border-stone-200/60 text-stone-800 px-4 py-3 text-[14px] leading-relaxed">
-                        ${escapeHtml(message.text)}
                     </div>
                 </div>
             `;
   }).join("");
 }
-function formatDraftDeadline(deadline) {
-  if (!deadline) return "";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) return "use a date like 2026-04-30";
-  return formatters.modalDate.format(parseLocalISODate(deadline)).toLowerCase();
-}
-function renderReview(draft) {
+function renderHowItWorks(projectSetup) {
+  if (projectSetup.messages.length > 1) return "";
   return `
-        <div class="flex-1 overflow-y-auto p-8 flex flex-col gap-6">
-            <div class="rounded-3xl border border-stone-200 bg-stone-50/60 p-5">
-                <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 mb-2">bay draft</div>
-                <p class="text-[14px] leading-relaxed text-stone-500 lowercase">
-                    edit anything that feels wrong. Bay will create exactly what you confirm here.
-                </p>
+        <section class="animate-reveal rounded-[32px] border border-stone-200/80 bg-white/90 p-5 shadow-soft sm:p-6">
+            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-end">
+                <div>
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">how it works</div>
+                    <p class="mt-3 text-[15px] leading-relaxed text-stone-600 lowercase">
+                        answer a few prompts in plain language. the system turns that into a clean project draft with editable starter tasks before anything is saved.
+                    </p>
+                </div>
+                <div class="rounded-[24px] bg-stone-50 p-4">
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">status</div>
+                    <div class="mt-2 text-[14px] font-medium lowercase text-stone-900">
+                        ${projectSetup.phase === "review" ? "ready for review" : "collecting project context"}
+                    </div>
+                </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label class="flex flex-col gap-2">
-                    <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">project name</span>
-                    <input id="projectDraftName" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none focus:border-stone-400" value="${escapeHtml(draft.name)}">
-                </label>
-                <label class="flex flex-col gap-2">
-                    <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">deadline</span>
-                    <input id="projectDraftDeadline" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none focus:border-stone-400" value="${escapeHtml(draft.deadline)}">
-                    <span class="text-[12px] text-stone-500 lowercase">${escapeHtml(formatDraftDeadline(draft.deadline))}</span>
-                </label>
-            </div>
-            <label class="flex flex-col gap-2">
-                <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">summary</span>
-                <textarea id="projectDraftSummary" class="min-h-[120px] rounded-3xl border border-stone-200 bg-white px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none resize-none focus:border-stone-400">${escapeHtml(draft.summary)}</textarea>
-            </label>
-            <label class="flex flex-col gap-2">
-                <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">next step</span>
-                <input id="projectDraftNextStep" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none focus:border-stone-400" value="${escapeHtml(draft.nextStep)}">
-            </label>
-            <div class="flex flex-col gap-3">
-                <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">starter tasks</div>
-                ${draft.tasks.map(
-    (task, index) => `
-                            <div class="rounded-[22px] border border-stone-200 bg-white px-4 py-3">
-                                <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 mb-2">${index === 0 ? "next step task" : `task ${index + 1}`}</div>
-                                <input
-                                    data-action="edit-project-draft-task"
-                                    data-task-id="${task.id}"
-                                    class="w-full bg-transparent border-none outline-none text-[14px] text-stone-900"
-                                    value="${escapeHtml(task.title)}"
-                                >
-                            </div>
-                        `
+            ${projectSetup.phase === "chat" && projectSetup.messages.length <= 1 ? `
+                <div class="mt-5 pt-5 border-t border-stone-100">
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">quick starters</div>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        ${quickStarters.map(
+    (starter) => `
+                                    <button
+                                        data-action="project-setup-suggestion"
+                                        data-suggestion="${escapeHtml(starter)}"
+                                        class="rounded-full border border-stone-200 bg-white px-4 py-2 text-[13px] font-medium lowercase text-stone-600 transition-all hover:border-stone-400 hover:text-stone-900 hover:shadow-sm"
+                                        type="button"
+                                    >
+                                        ${escapeHtml(starter)}
+                                    </button>
+                                `
   ).join("")}
+                    </div>
+                </div>
+            ` : ""}
+        </section>
+    `;
+}
+function renderTaskInputs(tasks) {
+  return tasks.map(
+    (task, index) => `
+                <label class="flex items-start gap-3 rounded-[22px] border border-stone-200 bg-white px-4 py-3 shadow-sm">
+                    <span class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-[7px] border-2 border-stone-900 bg-stone-900 text-white">
+                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <span class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">
+                            ${index === 0 ? "next move" : `starter task ${index + 1}`}
+                        </span>
+                        <input
+                            data-action="edit-project-draft-task"
+                            data-task-id="${task.id}"
+                            class="w-full bg-transparent text-[14px] font-medium text-stone-900 outline-none"
+                            value="${escapeHtml(task.title)}"
+                        >
+                    </span>
+                </label>
+            `
+  ).join("");
+}
+function renderReviewCard(draft) {
+  const selectedCount = draft.tasks.filter((task) => task.title.trim()).length;
+  return `
+        <section class="animate-reveal mt-8 rounded-[32px] border border-stone-200/80 bg-white p-5 shadow-float sm:p-7" style="animation-delay: 180ms">
+            <div class="flex flex-col gap-4 border-b border-stone-100 pb-6 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">starter plan</div>
+                    <h2 class="mt-2 font-display text-3xl lowercase tracking-tight text-stone-900">review before creating</h2>
+                    <p class="mt-2 max-w-2xl text-[14px] leading-relaxed text-stone-500 lowercase">
+                        this is the wireframe for the new project. edit the fields directly, then create it when the structure feels right.
+                    </p>
+                </div>
+                <div class="inline-flex items-center gap-2 self-start rounded-full border border-stone-200 bg-stone-50 px-3 py-2 text-[12px] font-medium lowercase text-stone-600">
+                    <span class="h-2 w-2 rounded-full bg-stone-900"></span>
+                    ${selectedCount} starter tasks ready
+                </div>
+            </div>
+
+            <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+                <div class="flex flex-col gap-4">
+                    <div class="grid gap-4 md:grid-cols-2">
+                        <label class="flex flex-col gap-2">
+                            <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">project name</span>
+                            <input id="projectDraftName" class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white" value="${escapeHtml(draft.name)}">
+                        </label>
+                        <label class="flex flex-col gap-2">
+                            <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">deadline</span>
+                            <input id="projectDraftDeadline" class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white" value="${escapeHtml(draft.deadline)}">
+                            <span class="text-[12px] text-stone-500 lowercase">${escapeHtml(formatDraftDeadline(draft.deadline))}</span>
+                        </label>
+                    </div>
+
+                    <label class="flex flex-col gap-2">
+                        <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">summary</span>
+                        <textarea id="projectDraftSummary" class="min-h-[132px] rounded-[28px] border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white resize-none">${escapeHtml(draft.summary)}</textarea>
+                    </label>
+
+                    <label class="flex flex-col gap-2">
+                        <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">next step</span>
+                        <input id="projectDraftNextStep" class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white" value="${escapeHtml(draft.nextStep)}">
+                    </label>
+                </div>
+
+                <div class="rounded-[28px] border border-stone-200 bg-stone-50/80 p-5">
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">starter tasks</div>
+                            <div class="mt-1 text-[13px] text-stone-500 lowercase">adjust the first pass before it becomes real tasks</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex flex-col gap-3">
+                        ${renderTaskInputs(draft.tasks)}
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+function renderComposer() {
+  return `
+        <div class="border-t border-stone-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-4xl">
+                <div class="group relative rounded-[30px] border border-stone-200 bg-stone-50 p-2 transition-all focus-within:border-stone-400 focus-within:bg-white focus-within:shadow-float">
+                    <textarea
+                        id="projectSetupInput"
+                        aria-label="describe the project"
+                        class="min-h-[56px] max-h-[180px] w-full resize-none bg-transparent px-4 py-3 pr-16 text-[15px] leading-relaxed text-stone-900 outline-none placeholder:text-stone-400"
+                        rows="1"
+                        placeholder="describe the project, deadline, or what success looks like..."
+                    ></textarea>
+                    <button
+                        data-action="send-project-setup"
+                        aria-label="send project setup message"
+                        class="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-stone-900 text-white shadow-sm transition-all hover:scale-[1.03] hover:bg-stone-800"
+                        type="button"
+                    >
+                        <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </div>
+                <div class="mt-3 flex items-center justify-between gap-4 px-1 text-[11px] font-medium lowercase tracking-[0.14em] text-stone-400">
+                    <span>enter to send</span>
+                    <span>shift + enter for a new line</span>
+                </div>
             </div>
         </div>
     `;
 }
-function renderProjectSetupModal({ projectSetupModal, projectSetup }) {
-  if (!projectSetup.open) {
-    projectSetupModal.className = "hidden fixed inset-0 z-50 items-center justify-center p-6";
-    projectSetupModal.innerHTML = "";
-    return;
-  }
-  projectSetupModal.className = "fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6";
-  projectSetupModal.innerHTML = `
-        <div class="absolute inset-0 bg-stone-900/45 backdrop-blur-[2px] animate-backdrop" data-action="close-project-setup"></div>
-        <div role="dialog" aria-modal="true" aria-label="project setup" class="relative z-10 w-full max-w-[920px] max-h-[90vh] overflow-hidden rounded-[28px] sm:rounded-[32px] bg-white shadow-modal animate-modal flex flex-col">
-            <div class="px-4 py-4 sm:px-6 sm:py-5 border-b border-stone-100 flex flex-wrap items-center justify-between gap-3 bg-white">
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-9 h-9 rounded-full bg-stone-900 text-white flex items-center justify-center shadow-sm">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"></path><path d="M12 8v4l3 3"></path><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none"></circle></svg>
+function renderProjectSetupView({ projectSetup, projectCount }) {
+  const hasProjects = projectCount > 0;
+  return `
+        <div class="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_right,_rgba(17,17,17,0.05),_transparent_26%),linear-gradient(180deg,_rgba(246,246,245,0.7)_0%,_rgba(255,255,255,1)_28%)]">
+            <header class="border-b border-stone-100 bg-white/85 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center gap-4">
+                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-stone-900 text-white shadow-sm">
+                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"></path><path d="M12 8v4l3 3"></path><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none"></circle></svg>
+                        </div>
+                        <div>
+                            <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">add project</div>
+                            <h1 class="mt-1 font-display text-3xl lowercase tracking-tight text-stone-900 sm:text-4xl">project drafting studio</h1>
+                        </div>
                     </div>
-                    <div>
-                        <div class="text-[15px] font-medium lowercase">bay project setup</div>
-                        <div class="text-[12px] text-stone-500 lowercase">shape the project before it turns into tasks</div>
+                    <div class="flex items-center gap-2">
+                        <button
+                            data-action="restart-project-setup"
+                            class="rounded-2xl border border-stone-200 px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.16em] text-stone-500 transition-colors hover:border-stone-400 hover:text-stone-900"
+                            type="button"
+                        >
+                            restart
+                        </button>
+                        <button
+                            data-action="close-project-setup"
+                            class="rounded-2xl border border-stone-200 px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.16em] text-stone-500 transition-colors hover:border-stone-400 hover:text-stone-900"
+                            type="button"
+                        >
+                            ${hasProjects ? "close" : "skip"}
+                        </button>
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button data-action="restart-project-setup" class="px-3 py-2 rounded-xl text-[12px] font-medium border border-stone-200 text-stone-500 hover:text-stone-900 hover:border-stone-400 transition-colors lowercase" type="button">restart</button>
-                    <button data-action="close-project-setup" aria-label="close project setup" class="w-8 h-8 flex items-center justify-center rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-900 transition-colors" type="button">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
+            </header>
+
+            <section class="min-h-0 flex-1 flex flex-col">
+                <div class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+                    <div class="mx-auto flex max-w-4xl flex-col gap-4 pb-10">
+                        ${renderHowItWorks(projectSetup)}
+
+                        <section class="flex flex-col gap-4">
+                            ${renderSetupMessages(projectSetup.messages)}
+                        </section>
+
+                        ${projectSetup.phase === "review" && projectSetup.draft ? renderReviewCard(projectSetup.draft) : ""}
+                    </div>
                 </div>
-            </div>
-            ${projectSetup.phase === "review" && projectSetup.draft ? renderReview(projectSetup.draft) : `
-                        <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-stone-50/20">
-                            <div class="flex flex-col gap-4">
-                                ${renderSetupMessages(projectSetup.messages)}
+
+                ${projectSetup.phase === "review" && projectSetup.draft ? `
+                            <div class="border-t border-stone-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+                                <div class="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div class="text-[14px] leading-relaxed text-stone-500 lowercase">
+                                        create the project once the summary, next step, and starter tasks look right.
+                                    </div>
+                                    <button
+                                        data-action="confirm-project-draft"
+                                        class="inline-flex items-center justify-center gap-2 rounded-[18px] bg-stone-900 px-6 py-3 text-[14px] font-medium lowercase text-white shadow-sm transition-all hover:bg-stone-800 hover:shadow-md"
+                                        type="button"
+                                    >
+                                        create project
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                        <div class="border-t border-stone-100 p-4 bg-white">
-                            <div class="group border border-stone-200 bg-white rounded-3xl flex items-end p-1.5 focus-within:border-stone-500 focus-within:shadow-sm transition-all">
-                                <textarea id="projectSetupInput" aria-label="reply to bay" class="flex-1 bg-transparent border-none outline-none text-[14px] placeholder-stone-400 text-stone-900 py-2.5 pl-4 pr-2 resize-none max-h-[120px] overflow-y-auto" rows="1" placeholder="answer bay..."></textarea>
-                                <button data-action="send-project-setup" aria-label="send message" class="w-9 h-9 flex-shrink-0 rounded-full bg-stone-900 text-white flex items-center justify-center hover:scale-105 transition-transform shadow-sm mb-0.5 mr-0.5" type="button">
-                                    <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                                </button>
-                            </div>
-                        </div>
-                    `}
-            ${projectSetup.phase === "review" && projectSetup.draft ? `
-                        <div class="border-t border-stone-100 p-4 bg-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <button data-action="close-project-setup" class="px-4 py-3 rounded-2xl border border-stone-200 text-stone-500 hover:text-stone-900 hover:border-stone-400 transition-colors lowercase" type="button">
-                                cancel
-                            </button>
-                            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
-                                <button data-action="restart-project-setup" class="px-4 py-3 rounded-2xl border border-stone-200 text-stone-500 hover:text-stone-900 hover:border-stone-400 transition-colors lowercase" type="button">
-                                    restart
-                                </button>
-                                <button data-action="confirm-project-draft" class="px-5 py-3 rounded-2xl bg-stone-900 text-white font-medium shadow-sm hover:bg-stone-800 transition-colors lowercase" type="button">
-                                    create project
-                                </button>
-                            </div>
-                        </div>
-                    ` : ""}
+                        ` : renderComposer()}
+            </section>
         </div>
     `;
 }
@@ -8545,7 +11073,7 @@ function renderTaskBadges(task) {
   if (dueMeta.label) {
     badges.push(`
             <span class="${dueBadgeClass}">
-                <svg class="w-3.5 h-3.5 ${dueMeta.tone === "overdue" ? "text-red-500" : "text-stone-400"}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                <svg class="w-3.5 h-3.5 ${dueMeta.tone === "overdue" ? "text-red-500" : "text-stone-500"}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                 ${escapeHtml(dueMeta.label)}
             </span>
         `);
@@ -8576,8 +11104,8 @@ function renderTaskCard(task, options = {}) {
   const editDraft = options.editingDraft;
   const badges = renderTaskBadges(task);
   const anchorAttribute = anchorDate ? `data-anchor-date="${anchorDate}"` : "";
-  const rowClasses = isCompleted ? "task-row completed group bg-stone-50 rounded-2xl p-5 flex flex-col gap-3 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2" : "task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col gap-3 hover:border-stone-400 hover:bg-stone-50/50 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2";
-  const titleClasses = isCompleted ? "text-[15px] text-stone-400 font-medium line-through task-title" : "text-[15px] text-stone-900 font-semibold transition-colors duration-200 task-title";
+  const rowClasses = isCompleted ? "task-row completed group bg-stone-50/60 rounded-xl px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2" : "task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col gap-3 hover:border-stone-400 hover:bg-stone-50/50 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2";
+  const titleClasses = isCompleted ? "text-[14px] text-stone-400 font-medium line-through task-title" : "text-[15px] text-stone-900 font-semibold transition-colors duration-200 task-title";
   const checkboxClasses = isCompleted ? "w-[22px] h-[22px] rounded-full border-2 border-stone-900 bg-stone-900 flex items-center justify-center transition-all" : "w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white group-hover:border-stone-400";
   if (isEditing && editDraft) {
     return `
@@ -8608,22 +11136,32 @@ function renderTaskCard(task, options = {}) {
             </div>
         `;
   }
+  if (isCompleted) {
+    return `
+            <div class="${rowClasses}" data-action="open-task" data-task-id="${task.id}" data-task-list="${listId}" tabindex="0" role="button" aria-label="${escapeHtml(task.title)}" ${anchorAttribute} style="animation-delay: ${staggerDelay}ms">
+                <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper flex-shrink-0" aria-label="mark task incomplete" type="button">
+                    <div class="${checkboxClasses}">
+                        <svg class="w-3 h-3 text-white check-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                </button>
+                <div class="${titleClasses} truncate">${escapeHtml(task.title)}</div>
+            </div>
+        `;
+  }
   return `
         <div class="${rowClasses}" data-action="open-task" data-task-id="${task.id}" data-task-list="${listId}" draggable="true" tabindex="0" role="button" aria-label="${escapeHtml(task.title)}" ${anchorAttribute} style="animation-delay: ${staggerDelay}ms">
             <div class="flex items-start gap-4">
-                <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-0.5 flex-shrink-0" aria-label="${isCompleted ? "mark task incomplete" : "mark task complete"}" type="button">
+                <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-0.5 flex-shrink-0" aria-label="mark task complete" type="button">
                     <div class="${checkboxClasses}">
                         <svg class="w-3 h-3 text-white check-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     </div>
                 </button>
                 <div class="flex-1 flex flex-col justify-center gap-1.5 pt-0.5">
                     <div class="${titleClasses}">${escapeHtml(task.title)}</div>
-                    ${task.description ? `<p class="text-[13px] ${isCompleted ? "text-stone-400" : "text-stone-500"} leading-relaxed line-clamp-1">${escapeHtml(
-    task.description
-  )}</p>` : ""}
+                    ${task.description ? `<p class="text-[13px] text-stone-500 leading-relaxed line-clamp-1">${escapeHtml(task.description)}</p>` : ""}
                 </div>
             </div>
-            ${!isCompleted && badges ? `
+            ${badges ? `
                 <div class="pl-[38px] flex flex-wrap items-center gap-2">
                     ${badges}
                 </div>
@@ -8655,6 +11193,9 @@ function renderProjectView({ project, todoTasks, completedTasks, editingTaskId, 
                     <span class="px-4 py-2 rounded-full bg-stone-900 text-white text-[13px] font-medium lowercase shadow-sm">
                         ${escapeHtml(renderDeadline(project.deadline))}
                     </span>
+                    <button data-action="archive-project" data-project-id="${project.id}" class="mt-2 px-3 py-2 rounded-xl border border-stone-200 text-[12px] font-medium text-stone-500 hover:text-stone-900 hover:border-stone-400 transition-colors lowercase" type="button">
+                        archive project
+                    </button>
                 </div>
             </header>
             <div class="px-4 pb-4 sm:px-6 sm:pb-5 lg:px-10 lg:pb-6 flex-shrink-0 z-10 bg-white">
@@ -8679,19 +11220,24 @@ function renderProjectView({ project, todoTasks, completedTasks, editingTaskId, 
     })
   ).join("") : '<div class="rounded-3xl border border-dashed border-stone-300 bg-stone-50/70 p-6 text-[14px] text-stone-500 lowercase">No active project tasks yet.</div>'}
                 </div>
-                <div class="flex items-center gap-4 mt-10 mb-3">
-                    <h2 class="text-[11px] font-medium text-stone-500 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</h2>
-                    <div class="h-px bg-stone-100 flex-1"></div>
-                </div>
-                <div class="flex flex-col gap-2">
-                    ${completedTasks.length ? completedTasks.map(
+                ${completedTasks.length ? `
+                <details class="mt-8" open>
+                    <summary class="flex items-center gap-4 mb-3 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+                        <h2 class="text-[11px] font-medium text-stone-400 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</h2>
+                        <div class="h-px bg-stone-100 flex-1"></div>
+                        <svg class="w-3.5 h-3.5 text-stone-300 transition-transform details-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </summary>
+                    <div class="flex flex-col gap-1">
+                        ${completedTasks.map(
     (task, i2) => renderTaskCard(task, {
       index: i2,
       listId: "project-completed",
       editingDraft: editingTaskId === task.id ? editingTaskDraft : null
     })
-  ).join("") : '<div class="text-[13px] text-stone-500 lowercase">No completed project tasks yet.</div>'}
-                </div>
+  ).join("")}
+                    </div>
+                </details>
+                ` : ""}
             </div>
         </div>
     `;
@@ -8720,19 +11266,24 @@ function renderTodayView({ todoTasks, completedTasks, editingTaskId, editingTask
     })
   ).join("") : '<div class="rounded-3xl border border-dashed border-stone-300 bg-stone-50/70 p-6 text-[14px] text-stone-500 lowercase">No overdue or due-today tasks right now.</div>'}
                 </div>
-                <div class="flex items-center gap-4 mt-10 mb-3">
-                    <h2 class="text-[11px] font-medium text-stone-500 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</h2>
-                    <div class="h-px bg-stone-100 flex-1"></div>
-                </div>
-                <div class="flex flex-col gap-2">
-                    ${completedTasks.length ? completedTasks.map(
+                ${completedTasks.length ? `
+                <details class="mt-8" open>
+                    <summary class="flex items-center gap-4 mb-3 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+                        <h2 class="text-[11px] font-medium text-stone-400 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</h2>
+                        <div class="h-px bg-stone-100 flex-1"></div>
+                        <svg class="w-3.5 h-3.5 text-stone-300 transition-transform details-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </summary>
+                    <div class="flex flex-col gap-1">
+                        ${completedTasks.map(
     (task, i2) => renderTaskCard(task, {
       index: i2,
       listId: "today-completed",
       editingDraft: editingTaskId === task.id ? editingTaskDraft : null
     })
-  ).join("") : '<div class="text-[13px] text-stone-500 lowercase">No completed tasks yet.</div>'}
-                </div>
+  ).join("")}
+                    </div>
+                </details>
+                ` : ""}
             </div>
         </div>
     `;
@@ -8768,27 +11319,27 @@ function renderUpcomingView({ weekDays, groups, editingTaskId, editingTaskDraft 
         <div class="h-full flex flex-col min-h-0">
             <header class="px-4 py-4 pb-3 sm:px-6 sm:py-6 lg:px-10 lg:py-8 lg:pb-4 flex flex-col gap-4 sm:gap-6 flex-shrink-0 z-10 bg-white">
                 <h1 class="font-display text-4xl sm:text-5xl tracking-tight lowercase">upcoming</h1>
-                <div class="flex items-center justify-between gap-1 sm:gap-2 px-0 sm:px-2 py-1">
-                    <button data-action="shift-week" data-direction="-1" aria-label="previous week" class="w-10 h-10 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors" type="button">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                <div class="flex items-center gap-1 sm:gap-1.5">
+                    <button data-action="shift-week" data-direction="-1" aria-label="previous week" class="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors flex-shrink-0" type="button">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                     </button>
-                    <div class="flex-1 flex justify-between gap-2">
+                    <div class="flex-1 flex gap-1">
                         ${weekDays.map((day) => {
     const dayLabel = formatters.weekdayShort.format(day.date).toLowerCase();
     const numberLabel = day.date.getDate();
-    const baseClasses = day.isSelected ? "flex-1 flex flex-col items-center justify-center p-2 rounded-2xl bg-stone-900 text-white shadow-md cursor-pointer transition-colors" : day.isToday ? "flex-1 flex flex-col items-center justify-center p-2 rounded-2xl bg-stone-50 border border-stone-200/60 text-stone-700 cursor-pointer transition-colors relative" : "flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-stone-50 text-stone-600 cursor-pointer transition-colors relative";
-    const metaLabelClasses = day.isSelected ? "text-stone-300" : day.isToday ? "text-stone-500" : "text-stone-500";
+    const baseClasses = day.isSelected ? "flex-1 flex flex-col items-center py-1.5 rounded-xl bg-stone-900 text-white cursor-pointer transition-colors" : day.isToday ? "flex-1 flex flex-col items-center py-1.5 rounded-xl bg-stone-100 text-stone-700 cursor-pointer transition-colors relative" : "flex-1 flex flex-col items-center py-1.5 rounded-xl hover:bg-stone-50 text-stone-500 cursor-pointer transition-colors relative";
+    const metaLabelClasses = day.isSelected ? "text-stone-400" : "text-stone-400";
     return `
                                     <button data-action="select-upcoming-date" data-date="${day.iso}" class="${baseClasses}" type="button">
-                                        <span class="text-[10px] font-semibold uppercase tracking-wider mb-1 ${metaLabelClasses}">${escapeHtml(dayLabel)}</span>
-                                        <span class="text-lg font-medium">${numberLabel}</span>
-                                        ${day.hasTasks && !day.isSelected ? `<span class="absolute bottom-1 w-1 h-1 rounded-full ${day.isToday ? "bg-stone-900" : "bg-stone-400"}"></span>` : ""}
+                                        <span class="text-[10px] font-medium uppercase tracking-wider ${metaLabelClasses}">${escapeHtml(dayLabel)}</span>
+                                        <span class="text-[15px] font-semibold">${numberLabel}</span>
+                                        ${day.hasTasks && !day.isSelected ? `<span class="absolute bottom-0.5 w-1 h-1 rounded-full ${day.isToday ? "bg-stone-900" : "bg-stone-400"}"></span>` : ""}
                                     </button>
                                 `;
   }).join("")}
                     </div>
-                    <button data-action="shift-week" data-direction="1" aria-label="next week" class="w-10 h-10 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors" type="button">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <button data-action="shift-week" data-direction="1" aria-label="next week" class="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors flex-shrink-0" type="button">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                     </button>
                 </div>
             </header>
@@ -8811,11 +11362,14 @@ function renderUpcomingView({ weekDays, groups, editingTaskId, editingTaskDraft 
 var AUTH_HINT_STORAGE_KEY = "precortex.authHint";
 var store = createStore();
 var state = store.state;
-var initialTasks = store.initialTasks;
 var assistantConfigs = store.assistantConfigs;
 var authClient = null;
 var convexClient = null;
+var projectSubscription = null;
+var taskSubscription = null;
 var hasStoredAuthHint = false;
+var hasSeenProjectList = false;
+var lastProjectCount = 0;
 var byId = (id) => document.getElementById(id);
 var mobileViewport = window.matchMedia("(max-width: 1023px)");
 var suppressNextTaskListAnimation = false;
@@ -8842,7 +11396,6 @@ var dom = {
   openNavButton: byId("openNavButton"),
   reopenAssistantButton: byId("reopenAssistantButton"),
   taskModal: byId("taskModal"),
-  projectSetupModal: byId("projectSetupModal"),
   aiInput: byId("aiInput"),
   toastContainer: byId("toastContainer")
 };
@@ -8853,6 +11406,50 @@ var destinationLabels = {
   later: "later"
 };
 var activeToastTimer = null;
+function refreshAssistantConfigs() {
+  assistantConfigs = createAssistantConfigs(getInboxCount(state));
+}
+function createProjectBayMessages(project) {
+  return [
+    {
+      sender: "assistant",
+      text: `i'm tracking ${project.name}. the clearest next move is still: ${project.nextStep.toLowerCase()}.`,
+      rich: false,
+      tasks: []
+    }
+  ];
+}
+function maybeAutoOpenProjectSetup(projectCount, previousProjectCount = 0) {
+  if (state.auth.status === "authenticated" && projectCount === 0 && !state.projectSetup.open && (!hasSeenProjectList || previousProjectCount > 0)) {
+    openProjectSetup(state);
+  }
+}
+function syncProjects(projects) {
+  const previousProjectCount = lastProjectCount;
+  const nextMessages = {};
+  for (const project of projects) {
+    nextMessages[project.id] = state.projectMessagesByProjectId[project.id] || createProjectBayMessages(project);
+  }
+  state.projectMessagesByProjectId = nextMessages;
+  state.projects = projects;
+  lastProjectCount = projects.length;
+  if (state.currentView === "project" && state.selectedProjectId && !state.projects.some((project) => project.id === state.selectedProjectId)) {
+    state.currentView = "today";
+    state.selectedProjectId = null;
+  }
+  hasSeenProjectList = true;
+  maybeAutoOpenProjectSetup(projects.length, previousProjectCount);
+}
+function syncTasks(tasks) {
+  state.tasks = tasks;
+  if (state.modalTaskId && !state.tasks.some((task) => task.id === state.modalTaskId)) {
+    closeTaskModal(state);
+  }
+  if (state.editingTaskId && !state.tasks.some((task) => task.id === state.editingTaskId)) {
+    cancelTaskCardEdit(state);
+  }
+  refreshAssistantConfigs();
+}
 function readStoredAuthHint() {
   try {
     const raw = window.localStorage.getItem(AUTH_HINT_STORAGE_KEY);
@@ -8924,12 +11521,23 @@ function renderMainView(suppressAnimation = false) {
   const editingTaskId = state.editingTaskId;
   const editingTaskDraft = state.editingTaskDraft;
   dom.mainView.classList.toggle("task-list-static", suppressAnimation);
+  if (state.currentView === "project-setup") {
+    dom.mainView.innerHTML = renderProjectSetupView({
+      projectSetup: state.projectSetup,
+      projectCount: state.projects.length
+    });
+    return;
+  }
   if (state.currentView === "project") {
     const project = getSelectedProject(state);
     if (!project) {
-      state.currentView = "today";
-      state.selectedProjectId = null;
-      renderMainView();
+      dom.mainView.innerHTML = `
+                <div class="h-full flex items-center justify-center px-6">
+                    <div class="rounded-3xl border border-dashed border-stone-300 bg-stone-50/70 p-8 text-[14px] text-stone-500 lowercase">
+                        Loading project\u2026
+                    </div>
+                </div>
+            `;
       return;
     }
     dom.mainView.innerHTML = renderProjectView({
@@ -8965,7 +11573,9 @@ function renderMainView(suppressAnimation = false) {
     editingTaskDraft
   });
 }
+var lastModalTrigger = null;
 function updateTaskModal(animate = false) {
+  const hadTask = Boolean(dom.taskModal.querySelector('[role="dialog"]'));
   renderTaskModal({
     taskModal: dom.taskModal,
     task: getSelectedTask(state),
@@ -8974,9 +11584,22 @@ function updateTaskModal(animate = false) {
     subtaskDraft: state.modalSubtaskDraft,
     animate
   });
+  const dialog = dom.taskModal.querySelector('[role="dialog"]');
+  if (dialog && !hadTask) {
+    requestAnimationFrame(() => {
+      const firstFocusable = dialog.querySelector(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (firstFocusable) firstFocusable.focus();
+    });
+  }
+  if (!dialog && lastModalTrigger) {
+    lastModalTrigger.focus();
+    lastModalTrigger = null;
+  }
 }
 function updateAssistant() {
-  const config = state.currentView === "project" ? assistantConfigs.project : assistantConfigs[state.currentView];
+  const config = state.currentView === "project" ? assistantConfigs.project : assistantConfigs[state.currentView] || assistantConfigs.today;
   renderAssistantPanel({
     config,
     messages: getCurrentAssistantMessages(state),
@@ -9007,8 +11630,9 @@ function closeMobileChrome() {
 }
 function renderChrome() {
   const mobile = isMobileViewport();
-  const drawersOpen = mobile && (state.mobileNavOpen || state.assistantOpen);
-  const blockingSurfaceOpen = Boolean(getSelectedTask(state) || state.projectSetup.open);
+  const hideAssistantSurface = state.currentView === "project-setup";
+  const drawersOpen = mobile && (state.mobileNavOpen || state.assistantOpen && !hideAssistantSurface);
+  const blockingSurfaceOpen = Boolean(getSelectedTask(state));
   dom.mobileNav.classList.toggle("translate-x-0", mobile && state.mobileNavOpen);
   dom.mobileNav.classList.toggle("-translate-x-full", mobile && !state.mobileNavOpen);
   dom.mobileNav.classList.toggle("pointer-events-none", mobile && !state.mobileNavOpen);
@@ -9038,7 +11662,8 @@ function renderChrome() {
   dom.openNavButton.classList.toggle("translate-y-4", !showNavButton);
   dom.openNavButton.classList.toggle("scale-90", !showNavButton);
   dom.openNavButton.classList.toggle("pointer-events-none", !showNavButton);
-  const showAssistantButton = !state.assistantOpen && !blockingSurfaceOpen;
+  dom.assistantPanel.classList.toggle("hidden", hideAssistantSurface);
+  const showAssistantButton = !hideAssistantSurface && !state.assistantOpen && !blockingSurfaceOpen;
   dom.reopenAssistantButton.classList.toggle("opacity-100", showAssistantButton);
   dom.reopenAssistantButton.classList.toggle("translate-y-0", showAssistantButton);
   dom.reopenAssistantButton.classList.toggle("scale-100", showAssistantButton);
@@ -9083,10 +11708,6 @@ function render() {
   renderMainView(suppressAnimation);
   updateAssistant();
   updateTaskModal();
-  renderProjectSetupModal({
-    projectSetupModal: dom.projectSetupModal,
-    projectSetup: state.projectSetup
-  });
   renderChrome();
   if (state.currentView === "upcoming" && state.pendingUpcomingScrollTarget) {
     const target = state.pendingUpcomingScrollTarget;
@@ -9094,19 +11715,85 @@ function render() {
     requestAnimationFrame(() => scrollUpcomingTargetIntoView(target));
   }
 }
+function isModalInputFocused() {
+  const active = document.activeElement;
+  if (!active) return false;
+  const id = active.id;
+  return id === "modalTitleInput" || id === "modalDescriptionInput" || id === "modalNewSubtaskInput";
+}
+function renderAfterDataSync() {
+  const shouldKeepShellVisible = state.auth.status === "authenticated" || state.auth.status === "loading" && hasStoredAuthHint;
+  if (!shouldKeepShellVisible) {
+    render();
+    return;
+  }
+  dom.authRoot.classList.add("hidden");
+  dom.appShell.classList.remove("hidden");
+  dom.appShell.classList.add("flex");
+  renderNavigation({
+    currentView: state.currentView,
+    inboxCount: getInboxCount(state),
+    navInboxCount: dom.navInboxCount,
+    projectNav: dom.projectNav,
+    projects: getProjects(state),
+    selectedProjectId: state.selectedProjectId,
+    workspaceCard: dom.workspaceCard,
+    authUser: state.auth.user
+  });
+  if (!state.editingTaskId) {
+    renderMainView(true);
+  }
+  updateAssistant();
+  if (!isModalInputFocused()) {
+    updateTaskModal();
+  }
+  renderChrome();
+}
 function closeConvexClient() {
+  projectSubscription?.unsubscribe?.();
+  taskSubscription?.unsubscribe?.();
+  projectSubscription = null;
+  taskSubscription = null;
   if (!convexClient) return;
-  convexClient.clearAuth();
+  void convexClient.close();
   convexClient = null;
 }
 function resetAppState() {
   const freshStore = createStore();
   Object.assign(state, freshStore.state);
-  initialTasks = freshStore.initialTasks;
   assistantConfigs = freshStore.assistantConfigs;
+  hasSeenProjectList = false;
+  lastProjectCount = 0;
   if (isMobileViewport()) {
     state.assistantOpen = false;
   }
+}
+function handleDataError(error) {
+  console.error(error);
+  showToast("Could not sync latest changes.");
+}
+function subscribeToAppData() {
+  if (!convexClient) return;
+  projectSubscription?.unsubscribe?.();
+  taskSubscription?.unsubscribe?.();
+  projectSubscription = convexClient.onUpdate(
+    api.projects.list,
+    {},
+    (projects) => {
+      syncProjects(projects);
+      renderAfterDataSync();
+    },
+    handleDataError
+  );
+  taskSubscription = convexClient.onUpdate(
+    api.tasks.list,
+    {},
+    (tasks) => {
+      syncTasks(tasks);
+      renderAfterDataSync();
+    },
+    handleDataError
+  );
 }
 async function bootstrapAuth() {
   state.auth.status = "loading";
@@ -9125,25 +11812,30 @@ async function bootstrapAuth() {
       return;
     }
     closeConvexClient();
-    convexClient = new ConvexHttpClient(config.convexUrl);
-    const token = await authClient.getToken({ forceRefreshToken: false });
-    if (!token) {
+    convexClient = new ConvexClient(config.convexUrl, { expectAuth: true });
+    convexClient.setAuth(async () => {
+      if (!authClient) return null;
+      return authClient.getToken({ forceRefreshToken: false });
+    });
+    const viewer = await convexClient.query(api.auth.viewer, {});
+    if (!viewer) {
       clearAuthHint();
       state.auth.status = "unauthenticated";
       state.auth.user = null;
       render();
       return;
     }
-    convexClient.setAuth(token);
-    const viewer = await convexClient.query(api.auth.viewer, {});
+    subscribeToAppData();
+    await convexClient.mutation(api.debug.removeSeededProjects, {});
     state.auth.status = "authenticated";
-    state.auth.user = viewer ? {
+    state.auth.user = {
       name: viewer.name,
       email: viewer.email,
       picture: viewer.picture
-    } : session.user;
+    };
     persistAuthHint(state.auth.user);
     state.auth.errorMessage = null;
+    maybeAutoOpenProjectSetup(lastProjectCount);
     render();
   } catch (error) {
     closeConvexClient();
@@ -9207,16 +11899,33 @@ function sendMessage(textOverride) {
   if (view === "project") {
     const project = getSelectedProject(state);
     if (!project) return;
-    project.bayMessages.push({ sender: "user", text, rich: false, tasks: [] });
+    const messages = state.projectMessagesByProjectId[project.id] || createProjectBayMessages(project);
+    messages.push({ sender: "user", text, rich: false, tasks: [] });
+    state.projectMessagesByProjectId[project.id] = messages;
   } else {
     state.messagesByView[view].push({ sender: "user", text, rich: false, tasks: [] });
   }
   updateAssistant();
   dom.aiInput.value = "";
   dom.aiInput.style.height = "auto";
+  const typingIndicator = document.createElement("div");
+  typingIndicator.className = "flex items-start gap-3";
+  typingIndicator.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-stone-900 flex items-center justify-center text-white flex-shrink-0">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"></path><path d="M12 8v4l3 3"></path><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none"></circle></svg>
+        </div>
+        <div class="bg-stone-100 rounded-2xl px-4 py-3 flex items-center gap-1.5">
+            <span class="typing-dot w-1.5 h-1.5 rounded-full bg-stone-400"></span>
+            <span class="typing-dot w-1.5 h-1.5 rounded-full bg-stone-400"></span>
+            <span class="typing-dot w-1.5 h-1.5 rounded-full bg-stone-400"></span>
+        </div>
+    `;
+  dom.aiMessages.appendChild(typingIndicator);
+  dom.aiMessages.scrollTop = dom.aiMessages.scrollHeight;
   const reply = buildAssistantReply({ view, text, state, assistantConfigs });
   setTimeout(() => {
-    const targetMessages = view === "project" ? getSelectedProject(state)?.bayMessages : state.messagesByView[view];
+    typingIndicator.remove();
+    const targetMessages = view === "project" ? state.selectedProjectId ? state.projectMessagesByProjectId[state.selectedProjectId] : null : state.messagesByView[view];
     if (!targetMessages) return;
     targetMessages.push({
       sender: "assistant",
@@ -9229,21 +11938,141 @@ function sendMessage(textOverride) {
     }
   }, 500);
 }
-function sendProjectSetupMessage() {
+function sendProjectSetupMessage(textOverride) {
   const input = document.getElementById("projectSetupInput");
   if (!input) return;
-  const text = input.value.trim();
+  const text = (textOverride ?? input.value).trim();
   if (!text) return;
   submitProjectSetupInput(state, text);
   input.value = "";
   input.style.height = "auto";
   render();
 }
-function addModalSubtask(taskId) {
+async function runMutation(mutation, args, fallbackMessage = "Could not save change.") {
+  if (!convexClient) return null;
+  try {
+    return await convexClient.mutation(mutation, args);
+  } catch (error) {
+    console.error(error);
+    showToast(fallbackMessage);
+    return null;
+  }
+}
+async function createTask(title) {
+  const resolvedDueAt = state.currentView === "today" ? TODAY_ISO : null;
+  const projectId = state.currentView === "project" ? state.selectedProjectId : null;
+  await runMutation(
+    api.tasks.create,
+    {
+      title,
+      description: state.currentView === "project" ? "New project task added from the project view." : state.currentView === "inbox" ? "New inbox item waiting to be triaged." : "New task added from the quick entry field. Open it to add more detail.",
+      dueAt: resolvedDueAt ?? void 0,
+      projectId: projectId ?? void 0
+    },
+    "Could not create task."
+  );
+}
+async function saveTaskEdit() {
+  if (!state.editingTaskId || !state.editingTaskDraft) return;
+  const trimmedTitle = state.editingTaskDraft.title.trim();
+  if (!trimmedTitle) return;
+  const didSave = await runMutation(
+    api.tasks.update,
+    {
+      taskId: state.editingTaskId,
+      title: trimmedTitle,
+      description: state.editingTaskDraft.description.trim()
+    },
+    "Could not save task."
+  );
+  if (didSave !== null) {
+    cancelTaskCardEdit(state);
+    renderMainView();
+  }
+}
+async function addModalSubtask(taskId) {
   const value = state.modalSubtaskDraft.trim();
   if (!value) return;
-  addTaskSubtask(state, taskId, value);
+  const didAdd = await runMutation(
+    api.tasks.addSubtask,
+    {
+      taskId,
+      title: value
+    },
+    "Could not add subtask."
+  );
+  if (didAdd !== null) {
+    closeModalSubtaskComposer(state);
+    updateTaskModal();
+  }
+}
+async function createProjectFromDraft() {
+  const draft = state.projectSetup.draft;
+  if (!draft) return;
+  const createdProject = await runMutation(
+    api.projects.create,
+    {
+      name: draft.name.trim(),
+      deadline: parseProjectDeadlineInput(draft.deadline) || draft.deadline,
+      summary: draft.summary.trim(),
+      nextStep: draft.nextStep.trim(),
+      starterTasks: draft.tasks.map((task, index) => ({
+        title: task.title.trim(),
+        description: task.description?.trim() || "",
+        dueAt: index === 0 ? TODAY_ISO : void 0,
+        priority: index === 0 ? "high" : "medium"
+      }))
+    },
+    "Could not create project."
+  );
+  if (!createdProject) return;
+  closeProjectSetup(state);
+  state.currentView = "project";
+  state.selectedProjectId = createdProject.id;
+  state.assistantOpen = true;
   render();
+}
+function getVisibleTaskIds(listId) {
+  if (listId === "inbox") {
+    return getInboxTasks(state).map((task) => task.id);
+  }
+  if (listId === "today-todo") {
+    return getTodayTasks(state).map((task) => task.id);
+  }
+  if (listId === "today-completed") {
+    return getCompletedTasks(state).map((task) => task.id);
+  }
+  if (listId === "project-todo") {
+    return state.selectedProjectId ? getProjectTasks(state, state.selectedProjectId).map((task) => task.id) : [];
+  }
+  if (listId === "project-completed") {
+    return state.selectedProjectId ? getProjectCompletedTasks(state, state.selectedProjectId).map((task) => task.id) : [];
+  }
+  const upcomingGroups = getUpcomingGroups(state);
+  if (listId === "upcoming-tomorrow") {
+    return upcomingGroups.tomorrow.map((task) => task.id);
+  }
+  if (listId === "upcoming-this-week") {
+    return upcomingGroups["this-week"].map((task) => task.id);
+  }
+  if (listId === "upcoming-later") {
+    return upcomingGroups.later.map((task) => task.id);
+  }
+  return [];
+}
+function getReorderNeighbors(listId, draggedTaskId, targetTaskId, placement) {
+  const visibleIds = getVisibleTaskIds(listId).filter((taskId) => taskId !== draggedTaskId);
+  const targetIndex = visibleIds.indexOf(targetTaskId);
+  if (targetIndex === -1) {
+    return { beforeTaskId: void 0, afterTaskId: void 0 };
+  }
+  const insertIndex = placement === "after" ? targetIndex + 1 : targetIndex;
+  visibleIds.splice(insertIndex, 0, draggedTaskId);
+  const movedIndex = visibleIds.indexOf(draggedTaskId);
+  return {
+    beforeTaskId: movedIndex > 0 ? visibleIds[movedIndex - 1] : void 0,
+    afterTaskId: movedIndex < visibleIds.length - 1 ? visibleIds[movedIndex + 1] : void 0
+  };
 }
 function focusModalSubtaskInput() {
   requestAnimationFrame(() => {
@@ -9287,16 +12116,12 @@ document.addEventListener("keydown", (event) => {
       trapFocus(dialog, event);
       return;
     }
-    const setupDialog = dom.projectSetupModal.querySelector('[role="dialog"]');
-    if (setupDialog) {
-      trapFocus(setupDialog, event);
-      return;
-    }
   }
   if ((event.key === "Enter" || event.key === " ") && target?.dataset?.action === "open-task") {
     event.preventDefault();
     const taskId = target.dataset.taskId;
     if (taskId) {
+      lastModalTrigger = target;
       openTaskModal(state, taskId);
       closeMobileChrome();
       updateTaskModal(true);
@@ -9323,25 +12148,57 @@ document.addEventListener("keydown", (event) => {
     render();
     return;
   }
+  if ((event.key === "ArrowUp" || event.key === "ArrowDown") && (event.ctrlKey || event.metaKey)) {
+    const row = target?.closest?.(".task-row[draggable='true']");
+    if (row && row.dataset.taskId && row.dataset.taskList) {
+      event.preventDefault();
+      const listId = row.dataset.taskList;
+      const taskId = row.dataset.taskId;
+      const visibleIds = getVisibleTaskIds(listId);
+      const currentIndex = visibleIds.indexOf(taskId);
+      if (currentIndex === -1) return;
+      const direction = event.key === "ArrowUp" ? -1 : 1;
+      const neighborIndex = currentIndex + direction;
+      if (neighborIndex < 0 || neighborIndex >= visibleIds.length) return;
+      const neighborId = visibleIds[neighborIndex];
+      const placement = direction === -1 ? "before" : "after";
+      const { beforeTaskId, afterTaskId } = getReorderNeighbors(listId, taskId, neighborId, placement);
+      suppressNextTaskListAnimation = true;
+      void runMutation(
+        api.tasks.reorder,
+        {
+          taskId,
+          beforeTaskId,
+          afterTaskId,
+          listKey: listId,
+          todayIso: TODAY_ISO
+        },
+        "Could not reorder task."
+      ).then(() => {
+        requestAnimationFrame(() => {
+          const movedRow = document.querySelector(`.task-row[data-task-id="${taskId}"]`);
+          movedRow?.focus();
+        });
+      });
+      return;
+    }
+  }
   if (target?.id === "taskInput" && event.key === "Enter") {
     event.preventDefault();
     const value = target.value.trim();
     if (!value) return;
-    addTask(state, value);
+    void createTask(value);
     target.value = "";
-    render();
     return;
   }
   if (target?.dataset.action === "edit-task-title" && event.key === "Enter") {
     event.preventDefault();
-    saveTaskCardEdit(state);
-    renderMainView();
+    void saveTaskEdit();
     return;
   }
   if (target?.dataset.action === "edit-task-description" && event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
     event.preventDefault();
-    saveTaskCardEdit(state);
-    renderMainView();
+    void saveTaskEdit();
     return;
   }
   if (target?.id === "aiInput" && event.key === "Enter" && !event.shiftKey) {
@@ -9361,12 +12218,8 @@ document.addEventListener("input", (event) => {
   if (state.auth.status !== "authenticated") return;
   const target = event.target;
   if (!target) return;
-  if (target.id === "modalTitleInput") {
-    updateTaskField(state, target.dataset.taskId, "title", target.value);
-    return;
-  }
   if (target.id === "modalDescriptionInput") {
-    updateTaskField(state, target.dataset.taskId, "description", target.value);
+    autoResize(target);
     return;
   }
   if (target.dataset.action === "edit-task-title") {
@@ -9376,10 +12229,6 @@ document.addEventListener("input", (event) => {
   if (target.dataset.action === "edit-task-description") {
     updateTaskCardDraftField(state, "description", target.value);
     autoResize(target);
-    return;
-  }
-  if (target.dataset.action === "edit-subtask-title") {
-    updateSubtaskTitle(state, target.dataset.taskId, target.dataset.subtaskId, target.value);
     return;
   }
   if (target.id === "modalNewSubtaskInput") {
@@ -9415,19 +12264,81 @@ document.addEventListener("change", (event) => {
   if (state.auth.status !== "authenticated") return;
   const target = event.target;
   if (!target) return;
+  if (target.id === "modalTitleInput") {
+    const title = target.value.trim();
+    if (!title) {
+      showToast("Task title cannot be empty.");
+      return;
+    }
+    void runMutation(
+      api.tasks.update,
+      {
+        taskId: target.dataset.taskId,
+        title
+      },
+      "Could not update task title."
+    );
+    return;
+  }
+  if (target.id === "modalDescriptionInput") {
+    void runMutation(
+      api.tasks.update,
+      {
+        taskId: target.dataset.taskId,
+        description: target.value
+      },
+      "Could not update task description."
+    );
+    return;
+  }
+  if (target.dataset.action === "edit-subtask-title") {
+    const title = target.value.trim();
+    if (!title) {
+      showToast("Subtask title cannot be empty.");
+      return;
+    }
+    void runMutation(
+      api.tasks.updateSubtask,
+      {
+        taskId: target.dataset.taskId,
+        subtaskId: target.dataset.subtaskId,
+        title
+      },
+      "Could not update subtask."
+    );
+    return;
+  }
   if (target.dataset.action === "change-task-project") {
-    updateTaskProject(state, target.dataset.taskId, target.value);
-    updateTaskModal();
+    void runMutation(
+      api.tasks.update,
+      {
+        taskId: target.dataset.taskId,
+        projectId: target.value || null
+      },
+      "Could not move task."
+    );
     return;
   }
   if (target.dataset.action === "change-task-due-date") {
-    updateTaskDueDate(state, target.dataset.taskId, target.value);
-    updateTaskModal();
+    void runMutation(
+      api.tasks.update,
+      {
+        taskId: target.dataset.taskId,
+        dueAt: target.value || null
+      },
+      "Could not update due date."
+    );
     return;
   }
   if (target.dataset.action === "change-task-priority") {
-    updateTaskPriority(state, target.dataset.taskId, target.value);
-    updateTaskModal();
+    void runMutation(
+      api.tasks.update,
+      {
+        taskId: target.dataset.taskId,
+        priority: target.value || "none"
+      },
+      "Could not update priority."
+    );
   }
 });
 document.addEventListener("click", (event) => {
@@ -9470,20 +12381,36 @@ document.addEventListener("click", (event) => {
   if (action === "schedule-task") {
     const label = destinationLabels[destination] || destination;
     const row = actionElement.closest(".task-row");
-    const doSchedule = () => {
+    const doSchedule = async () => {
       const prevDueAt = state.tasks.find((t2) => t2.id === taskId)?.dueAt || null;
-      scheduleInboxTask(state, taskId, destination);
-      render();
+      const resolvedDueAt = getDateFromInboxDestination(destination);
+      const didSchedule = await runMutation(
+        api.tasks.update,
+        {
+          taskId,
+          dueAt: resolvedDueAt
+        },
+        "Could not schedule task."
+      );
+      if (didSchedule === null) return;
       showToast(`scheduled for ${label}`, () => {
-        unscheduleTask(state, taskId, prevDueAt);
-        render();
+        void runMutation(
+          api.tasks.update,
+          {
+            taskId,
+            dueAt: prevDueAt
+          },
+          "Could not undo scheduling."
+        );
       });
     };
     if (row) {
       row.classList.add("task-removing");
-      setTimeout(doSchedule, 250);
+      setTimeout(() => {
+        void doSchedule();
+      }, 250);
     } else {
-      doSchedule();
+      void doSchedule();
     }
     return;
   }
@@ -9492,17 +12419,31 @@ document.addEventListener("click", (event) => {
     if (row) {
       row.classList.add("task-completing");
     }
-    toggleTask(state, taskId);
-    render();
+    const task = state.tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    void runMutation(
+      api.tasks.setStatus,
+      {
+        taskId,
+        status: task.status === "todo" ? "completed" : "todo"
+      },
+      "Could not update task status."
+    );
     return;
   }
   if (action === "toggle-subtask") {
-    toggleSubtask(state, taskId, actionElement.dataset.subtaskId);
-    render();
+    void runMutation(
+      api.tasks.toggleSubtask,
+      {
+        taskId,
+        subtaskId: actionElement.dataset.subtaskId
+      },
+      "Could not update subtask."
+    );
     return;
   }
   if (action === "add-subtask") {
-    addModalSubtask(taskId);
+    void addModalSubtask(taskId);
     return;
   }
   if (action === "open-subtask-composer") {
@@ -9517,8 +12458,29 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "remove-subtask") {
-    removeSubtask(state, taskId, actionElement.dataset.subtaskId);
-    render();
+    void runMutation(
+      api.tasks.removeSubtask,
+      {
+        taskId,
+        subtaskId: actionElement.dataset.subtaskId
+      },
+      "Could not remove subtask."
+    );
+    return;
+  }
+  if (action === "delete-task") {
+    if (!window.confirm("Delete this task?")) return;
+    void runMutation(
+      api.tasks.remove,
+      {
+        taskId
+      },
+      "Could not delete task."
+    ).then((result) => {
+      if (result === null) return;
+      closeTaskModal(state);
+      render();
+    });
     return;
   }
   if (action === "edit-task-card") {
@@ -9528,8 +12490,7 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "save-task-edit") {
-    saveTaskCardEdit(state);
-    renderMainView();
+    void saveTaskEdit();
     return;
   }
   if (action === "cancel-task-edit") {
@@ -9539,6 +12500,7 @@ document.addEventListener("click", (event) => {
   }
   if (action === "open-task") {
     if (dragState.justDragged) return;
+    lastModalTrigger = actionElement;
     openTaskModal(state, taskId);
     closeMobileChrome();
     updateTaskModal(true);
@@ -9579,18 +12541,29 @@ document.addEventListener("click", (event) => {
     sendProjectSetupMessage();
     return;
   }
+  if (action === "project-setup-suggestion") {
+    sendProjectSetupMessage(suggestion);
+    return;
+  }
   if (action === "confirm-project-draft") {
-    confirmProjectDraft(state);
-    render();
+    void createProjectFromDraft();
+    return;
+  }
+  if (action === "archive-project") {
+    const projectId = actionElement.dataset.projectId;
+    if (!projectId) return;
+    if (!window.confirm("Archive this project and move its tasks back to inbox/projectless lists?")) return;
+    void runMutation(
+      api.projects.archive,
+      {
+        projectId
+      },
+      "Could not archive project."
+    );
     return;
   }
   if (action === "send-message") {
     sendMessage();
-    return;
-  }
-  if (action === "reset-inbox") {
-    resetInbox(state, initialTasks);
-    render();
     return;
   }
   if (action === "close-assistant") {
@@ -9657,11 +12630,26 @@ document.addEventListener("drop", (event) => {
   event.preventDefault();
   const rect = row.getBoundingClientRect();
   const placement = event.clientY > rect.top + rect.height / 2 ? "after" : "before";
-  reorderTask(state, dragState.taskId, row.dataset.taskId, placement);
+  const { beforeTaskId, afterTaskId } = getReorderNeighbors(
+    row.dataset.taskList,
+    dragState.taskId,
+    row.dataset.taskId,
+    placement
+  );
   suppressNextTaskListAnimation = true;
   dragState.justDragged = true;
   clearTaskDropIndicators();
-  render();
+  void runMutation(
+    api.tasks.reorder,
+    {
+      taskId: dragState.taskId,
+      beforeTaskId,
+      afterTaskId,
+      listKey: row.dataset.taskList,
+      todayIso: TODAY_ISO
+    },
+    "Could not reorder task."
+  );
 });
 document.addEventListener("dragend", () => {
   if (state.auth.status !== "authenticated") return;

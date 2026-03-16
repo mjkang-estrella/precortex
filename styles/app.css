@@ -1,7 +1,21 @@
-/* scrollbar colors match tailwind stone-200 / stone-300 */
+:root {
+    --stone-200: #e3e3df;
+    --stone-300: #cfcfc8;
+    --stone-900: #111111;
+    --placeholder: #b3b3a9;
+}
+
+details[open] .details-chevron {
+    transform: rotate(0deg);
+}
+
+details:not([open]) .details-chevron {
+    transform: rotate(-90deg);
+}
+
 * {
     scrollbar-width: thin;
-    scrollbar-color: #e3e3df transparent;
+    scrollbar-color: var(--stone-200) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -14,12 +28,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #e3e3df;
+    background: var(--stone-200);
     border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #cfcfc8;
+    background: var(--stone-300);
 }
 
 .check-icon {
@@ -59,6 +73,22 @@
 
 .typing-dot:nth-child(3) {
     animation-delay: 0.4s;
+}
+
+@keyframes slideUpFade {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-reveal {
+    animation: slideUpFade 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes modalShow {
@@ -129,11 +159,11 @@
 
 /* drop indicator color matches tailwind stone-900 */
 .task-drop-before {
-    box-shadow: inset 0 3px 0 0 #111111;
+    box-shadow: inset 0 3px 0 0 var(--stone-900);
 }
 
 .task-drop-after {
-    box-shadow: inset 0 -3px 0 0 #111111;
+    box-shadow: inset 0 -3px 0 0 var(--stone-900);
 }
 
 .task-row-editing {
@@ -149,7 +179,7 @@
 
 .task-card-title-input::placeholder,
 .task-card-description-input::placeholder {
-    color: #a8a29e;
+    color: var(--placeholder);
 }
 
 /* Task removal (inbox triage) */
@@ -258,5 +288,18 @@
 
     #assistantPanel {
         right: 0;
+    }
+}
+
+/* Show hover-dependent controls on touch devices */
+@media (hover: none) {
+    [data-action="remove-subtask"] {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+
+    /* Inbox schedule buttons always visible on touch (no hover state) */
+    .task-row .xl\:opacity-0 {
+        opacity: 1 !important;
     }
 }

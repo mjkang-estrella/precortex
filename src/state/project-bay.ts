@@ -31,9 +31,10 @@ function isPastDate(value) {
     return parseLocalISODate(value).getTime() < TODAY.getTime();
 }
 
-export function createProjectSetupState(open = false) {
+export function createProjectSetupState(open = false, previousView = "today") {
     return {
         open,
+        previousView,
         phase: "chat",
         promptKey: "name",
         messages: open

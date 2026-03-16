@@ -39,33 +39,31 @@ export function renderUpcomingView({ weekDays, groups, editingTaskId, editingTas
         <div class="h-full flex flex-col min-h-0">
             <header class="px-4 py-4 pb-3 sm:px-6 sm:py-6 lg:px-10 lg:py-8 lg:pb-4 flex flex-col gap-4 sm:gap-6 flex-shrink-0 z-10 bg-white">
                 <h1 class="font-display text-4xl sm:text-5xl tracking-tight lowercase">upcoming</h1>
-                <div class="flex items-center justify-between gap-1 sm:gap-2 px-0 sm:px-2 py-1">
-                    <button data-action="shift-week" data-direction="-1" aria-label="previous week" class="w-10 h-10 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors" type="button">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                <div class="flex items-center gap-1 sm:gap-1.5">
+                    <button data-action="shift-week" data-direction="-1" aria-label="previous week" class="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors flex-shrink-0" type="button">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                     </button>
-                    <div class="flex-1 flex justify-between gap-2">
+                    <div class="flex-1 flex gap-1">
                         ${weekDays
                             .map((day) => {
                                 const dayLabel = formatters.weekdayShort.format(day.date).toLowerCase();
                                 const numberLabel = day.date.getDate();
                                 const baseClasses = day.isSelected
-                                    ? "flex-1 flex flex-col items-center justify-center p-2 rounded-2xl bg-stone-900 text-white shadow-md cursor-pointer transition-colors"
+                                    ? "flex-1 flex flex-col items-center py-1.5 rounded-xl bg-stone-900 text-white cursor-pointer transition-colors"
                                     : day.isToday
-                                      ? "flex-1 flex flex-col items-center justify-center p-2 rounded-2xl bg-stone-50 border border-stone-200/60 text-stone-700 cursor-pointer transition-colors relative"
-                                      : "flex-1 flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-stone-50 text-stone-600 cursor-pointer transition-colors relative";
+                                      ? "flex-1 flex flex-col items-center py-1.5 rounded-xl bg-stone-100 text-stone-700 cursor-pointer transition-colors relative"
+                                      : "flex-1 flex flex-col items-center py-1.5 rounded-xl hover:bg-stone-50 text-stone-500 cursor-pointer transition-colors relative";
                                 const metaLabelClasses = day.isSelected
-                                    ? "text-stone-300"
-                                    : day.isToday
-                                      ? "text-stone-500"
-                                      : "text-stone-500";
+                                    ? "text-stone-400"
+                                    : "text-stone-400";
 
                                 return `
                                     <button data-action="select-upcoming-date" data-date="${day.iso}" class="${baseClasses}" type="button">
-                                        <span class="text-[10px] font-semibold uppercase tracking-wider mb-1 ${metaLabelClasses}">${escapeHtml(dayLabel)}</span>
-                                        <span class="text-lg font-medium">${numberLabel}</span>
+                                        <span class="text-[10px] font-medium uppercase tracking-wider ${metaLabelClasses}">${escapeHtml(dayLabel)}</span>
+                                        <span class="text-[15px] font-semibold">${numberLabel}</span>
                                         ${
                                             day.hasTasks && !day.isSelected
-                                                ? `<span class="absolute bottom-1 w-1 h-1 rounded-full ${
+                                                ? `<span class="absolute bottom-0.5 w-1 h-1 rounded-full ${
                                                       day.isToday ? "bg-stone-900" : "bg-stone-400"
                                                   }"></span>`
                                                 : ""
@@ -75,8 +73,8 @@ export function renderUpcomingView({ weekDays, groups, editingTaskId, editingTas
                             })
                             .join("")}
                     </div>
-                    <button data-action="shift-week" data-direction="1" aria-label="next week" class="w-10 h-10 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors" type="button">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <button data-action="shift-week" data-direction="1" aria-label="next week" class="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-900 hover:bg-stone-50 transition-colors flex-shrink-0" type="button">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                     </button>
                 </div>
             </header>

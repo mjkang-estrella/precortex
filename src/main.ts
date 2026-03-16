@@ -1,12 +1,15 @@
-import { ConvexHttpClient } from "convex/browser";
+import { ConvexClient } from "convex/browser";
 import { createAuthClient, formatAuthError } from "./auth/client.js";
 import { api } from "../convex/_generated/api.js";
+import { createAssistantConfigs } from "./data/assistant.js";
 import { assistantIcons } from "./data/assistant.js";
 import { getAppConfig } from "./config.js";
 import * as actions from "./state/actions.js";
+import { parseProjectDeadlineInput } from "./state/project-bay.js";
 import { buildAssistantReply } from "./state/assistant-replies.js";
 import {
     getCompletedTasks,
+    getDateFromInboxDestination,
     getCurrentAssistantMessages,
     getInboxCount,
     getInboxTasks,
@@ -21,13 +24,13 @@ import {
     getWeekDays,
 } from "./state/selectors.js";
 import { createStore } from "./state/store.js";
-import { parseLocalISODate } from "./utils/date.js";
+import { TODAY_ISO, parseLocalISODate } from "./utils/date.js";
 import { renderAssistantPanel } from "./views/assistant-view.js";
 import { renderAuthError, renderAuthLoading, renderAuthScreen } from "./views/auth-view.js";
 import { renderInboxView } from "./views/inbox-view.js";
 import { renderTaskModal } from "./views/modal-view.js";
 import { renderNavigation } from "./views/navigation-view.js";
-import { renderProjectSetupModal } from "./views/project-setup-modal.js";
+import { renderProjectSetupView } from "./views/project-setup-view.js";
 import { renderProjectView } from "./views/project-view.js";
 import { renderTodayView } from "./views/today-view.js";
 import { renderUpcomingView } from "./views/upcoming-view.js";
@@ -35,11 +38,14 @@ import { renderUpcomingView } from "./views/upcoming-view.js";
 const AUTH_HINT_STORAGE_KEY = "precortex.authHint";
 const store = createStore();
 const state = store.state;
-let initialTasks = store.initialTasks;
 let assistantConfigs = store.assistantConfigs;
 let authClient = null;
 let convexClient = null;
+let projectSubscription = null;
+let taskSubscription = null;
 let hasStoredAuthHint = false;
+let hasSeenProjectList = false;
+let lastProjectCount = 0;
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const mobileViewport = window.matchMedia("(max-width: 1023px)");
 let suppressNextTaskListAnimation = false;
@@ -67,7 +73,6 @@ const dom = {
     openNavButton: byId<HTMLButtonElement>("openNavButton"),
     reopenAssistantButton: byId<HTMLButtonElement>("reopenAssistantButton"),
     taskModal: byId<HTMLElement>("taskModal"),
-    projectSetupModal: byId<HTMLElement>("projectSetupModal"),
     aiInput: byId<HTMLTextAreaElement>("aiInput"),
     toastContainer: byId<HTMLElement>("toastContainer"),
 };
@@ -80,6 +85,71 @@ const destinationLabels = {
 };
 
 let activeToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function refreshAssistantConfigs() {
+    assistantConfigs = createAssistantConfigs(getInboxCount(state));
+}
+
+function createProjectBayMessages(project) {
+    return [
+        {
+            sender: "assistant",
+            text: `i'm tracking ${project.name}. the clearest next move is still: ${project.nextStep.toLowerCase()}.`,
+            rich: false,
+            tasks: [],
+        },
+    ];
+}
+
+function maybeAutoOpenProjectSetup(projectCount, previousProjectCount = 0) {
+    if (
+        state.auth.status === "authenticated" &&
+        projectCount === 0 &&
+        !state.projectSetup.open &&
+        (!hasSeenProjectList || previousProjectCount > 0)
+    ) {
+        actions.openProjectSetup(state);
+    }
+}
+
+function syncProjects(projects) {
+    const previousProjectCount = lastProjectCount;
+    const nextMessages = {};
+    for (const project of projects) {
+        nextMessages[project.id] =
+            state.projectMessagesByProjectId[project.id] || createProjectBayMessages(project);
+    }
+
+    state.projectMessagesByProjectId = nextMessages;
+    state.projects = projects;
+    lastProjectCount = projects.length;
+
+    if (
+        state.currentView === "project" &&
+        state.selectedProjectId &&
+        !state.projects.some((project) => project.id === state.selectedProjectId)
+    ) {
+        state.currentView = "today";
+        state.selectedProjectId = null;
+    }
+
+    hasSeenProjectList = true;
+    maybeAutoOpenProjectSetup(projects.length, previousProjectCount);
+}
+
+function syncTasks(tasks) {
+    state.tasks = tasks;
+
+    if (state.modalTaskId && !state.tasks.some((task) => task.id === state.modalTaskId)) {
+        actions.closeTaskModal(state);
+    }
+
+    if (state.editingTaskId && !state.tasks.some((task) => task.id === state.editingTaskId)) {
+        actions.cancelTaskCardEdit(state);
+    }
+
+    refreshAssistantConfigs();
+}
 
 function readStoredAuthHint() {
     try {
@@ -166,12 +236,24 @@ function renderMainView(suppressAnimation = false) {
 
     dom.mainView.classList.toggle("task-list-static", suppressAnimation);
 
+    if (state.currentView === "project-setup") {
+        dom.mainView.innerHTML = renderProjectSetupView({
+            projectSetup: state.projectSetup,
+            projectCount: state.projects.length,
+        });
+        return;
+    }
+
     if (state.currentView === "project") {
         const project = getSelectedProject(state);
         if (!project) {
-            state.currentView = "today";
-            state.selectedProjectId = null;
-            renderMainView();
+            dom.mainView.innerHTML = `
+                <div class="h-full flex items-center justify-center px-6">
+                    <div class="rounded-3xl border border-dashed border-stone-300 bg-stone-50/70 p-8 text-[14px] text-stone-500 lowercase">
+                        Loading project…
+                    </div>
+                </div>
+            `;
             return;
         }
 
@@ -212,7 +294,10 @@ function renderMainView(suppressAnimation = false) {
     });
 }
 
+let lastModalTrigger: HTMLElement | null = null;
+
 function updateTaskModal(animate = false) {
+    const hadTask = Boolean(dom.taskModal.querySelector('[role="dialog"]'));
     renderTaskModal({
         taskModal: dom.taskModal,
         task: getSelectedTask(state),
@@ -221,11 +306,26 @@ function updateTaskModal(animate = false) {
         subtaskDraft: state.modalSubtaskDraft,
         animate,
     });
+    const dialog = dom.taskModal.querySelector('[role="dialog"]') as HTMLElement | null;
+    if (dialog && !hadTask) {
+        requestAnimationFrame(() => {
+            const firstFocusable = dialog.querySelector<HTMLElement>(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            );
+            if (firstFocusable) firstFocusable.focus();
+        });
+    }
+    if (!dialog && lastModalTrigger) {
+        lastModalTrigger.focus();
+        lastModalTrigger = null;
+    }
 }
 
 function updateAssistant() {
     const config =
-        state.currentView === "project" ? assistantConfigs.project : assistantConfigs[state.currentView];
+        state.currentView === "project"
+            ? assistantConfigs.project
+            : assistantConfigs[state.currentView] || assistantConfigs.today;
     renderAssistantPanel({
         config,
         messages: getCurrentAssistantMessages(state),
@@ -262,8 +362,9 @@ function closeMobileChrome() {
 
 function renderChrome() {
     const mobile = isMobileViewport();
-    const drawersOpen = mobile && (state.mobileNavOpen || state.assistantOpen);
-    const blockingSurfaceOpen = Boolean(getSelectedTask(state) || state.projectSetup.open);
+    const hideAssistantSurface = state.currentView === "project-setup";
+    const drawersOpen = mobile && (state.mobileNavOpen || (state.assistantOpen && !hideAssistantSurface));
+    const blockingSurfaceOpen = Boolean(getSelectedTask(state));
 
     dom.mobileNav.classList.toggle("translate-x-0", mobile && state.mobileNavOpen);
     dom.mobileNav.classList.toggle("-translate-x-full", mobile && !state.mobileNavOpen);
@@ -300,7 +401,9 @@ function renderChrome() {
     dom.openNavButton.classList.toggle("scale-90", !showNavButton);
     dom.openNavButton.classList.toggle("pointer-events-none", !showNavButton);
 
-    const showAssistantButton = !state.assistantOpen && !blockingSurfaceOpen;
+    dom.assistantPanel.classList.toggle("hidden", hideAssistantSurface);
+
+    const showAssistantButton = !hideAssistantSurface && !state.assistantOpen && !blockingSurfaceOpen;
     dom.reopenAssistantButton.classList.toggle("opacity-100", showAssistantButton);
     dom.reopenAssistantButton.classList.toggle("translate-y-0", showAssistantButton);
     dom.reopenAssistantButton.classList.toggle("scale-100", showAssistantButton);
@@ -353,10 +456,6 @@ function render() {
     renderMainView(suppressAnimation);
     updateAssistant();
     updateTaskModal();
-    renderProjectSetupModal({
-        projectSetupModal: dom.projectSetupModal,
-        projectSetup: state.projectSetup,
-    });
     renderChrome();
 
     if (state.currentView === "upcoming" && state.pendingUpcomingScrollTarget) {
@@ -366,9 +465,56 @@ function render() {
     }
 }
 
+function isModalInputFocused() {
+    const active = document.activeElement;
+    if (!active) return false;
+    const id = (active as HTMLElement).id;
+    return id === "modalTitleInput" || id === "modalDescriptionInput" || id === "modalNewSubtaskInput";
+}
+
+function renderAfterDataSync() {
+    const shouldKeepShellVisible = state.auth.status === "authenticated" || (state.auth.status === "loading" && hasStoredAuthHint);
+    if (!shouldKeepShellVisible) {
+        render();
+        return;
+    }
+
+    dom.authRoot.classList.add("hidden");
+    dom.appShell.classList.remove("hidden");
+    dom.appShell.classList.add("flex");
+
+    renderNavigation({
+        currentView: state.currentView,
+        inboxCount: getInboxCount(state),
+        navInboxCount: dom.navInboxCount,
+        projectNav: dom.projectNav,
+        projects: getProjects(state),
+        selectedProjectId: state.selectedProjectId,
+        workspaceCard: dom.workspaceCard,
+        authUser: state.auth.user,
+    });
+
+    if (!state.editingTaskId) {
+        renderMainView(true);
+    }
+
+    updateAssistant();
+
+    if (!isModalInputFocused()) {
+        updateTaskModal();
+    }
+
+    renderChrome();
+}
+
 function closeConvexClient() {
+    projectSubscription?.unsubscribe?.();
+    taskSubscription?.unsubscribe?.();
+    projectSubscription = null;
+    taskSubscription = null;
+
     if (!convexClient) return;
-    convexClient.clearAuth();
+    void convexClient.close();
     convexClient = null;
 }
 
@@ -376,12 +522,45 @@ function resetAppState() {
     const freshStore = createStore();
 
     Object.assign(state, freshStore.state);
-    initialTasks = freshStore.initialTasks;
     assistantConfigs = freshStore.assistantConfigs;
+    hasSeenProjectList = false;
+    lastProjectCount = 0;
 
     if (isMobileViewport()) {
         state.assistantOpen = false;
     }
+}
+
+function handleDataError(error: Error) {
+    console.error(error);
+    showToast("Could not sync latest changes.");
+}
+
+function subscribeToAppData() {
+    if (!convexClient) return;
+
+    projectSubscription?.unsubscribe?.();
+    taskSubscription?.unsubscribe?.();
+
+    projectSubscription = convexClient.onUpdate(
+        api.projects.list,
+        {},
+        (projects) => {
+            syncProjects(projects);
+            renderAfterDataSync();
+        },
+        handleDataError,
+    );
+
+    taskSubscription = convexClient.onUpdate(
+        api.tasks.list,
+        {},
+        (tasks) => {
+            syncTasks(tasks);
+            renderAfterDataSync();
+        },
+        handleDataError,
+    );
 }
 
 async function bootstrapAuth() {
@@ -404,29 +583,33 @@ async function bootstrapAuth() {
         }
 
         closeConvexClient();
-        convexClient = new ConvexHttpClient(config.convexUrl);
-        const token = await authClient.getToken({ forceRefreshToken: false });
-        if (!token) {
+        convexClient = new ConvexClient(config.convexUrl, { expectAuth: true });
+        convexClient.setAuth(async () => {
+            if (!authClient) return null;
+            return authClient.getToken({ forceRefreshToken: false });
+        });
+
+        const viewer = await convexClient.query(api.auth.viewer, {});
+        if (!viewer) {
             clearAuthHint();
             state.auth.status = "unauthenticated";
             state.auth.user = null;
             render();
             return;
         }
-        convexClient.setAuth(token);
 
-        const viewer = await convexClient.query(api.auth.viewer, {});
+        subscribeToAppData();
+        await convexClient.mutation(api.debug.removeSeededProjects, {});
 
         state.auth.status = "authenticated";
-        state.auth.user = viewer
-            ? {
-                  name: viewer.name,
-                  email: viewer.email,
-                  picture: viewer.picture,
-              }
-            : session.user;
+        state.auth.user = {
+            name: viewer.name,
+            email: viewer.email,
+            picture: viewer.picture,
+        };
         persistAuthHint(state.auth.user);
         state.auth.errorMessage = null;
+        maybeAutoOpenProjectSetup(lastProjectCount);
         render();
     } catch (error) {
         closeConvexClient();
@@ -499,7 +682,9 @@ function sendMessage(textOverride?: string) {
     if (view === "project") {
         const project = getSelectedProject(state);
         if (!project) return;
-        project.bayMessages.push({ sender: "user", text, rich: false, tasks: [] });
+        const messages = state.projectMessagesByProjectId[project.id] || createProjectBayMessages(project);
+        messages.push({ sender: "user", text, rich: false, tasks: [] });
+        state.projectMessagesByProjectId[project.id] = messages;
     } else {
         state.messagesByView[view].push({ sender: "user", text, rich: false, tasks: [] });
     }
@@ -508,11 +693,29 @@ function sendMessage(textOverride?: string) {
     dom.aiInput.value = "";
     dom.aiInput.style.height = "auto";
 
+    const typingIndicator = document.createElement("div");
+    typingIndicator.className = "flex items-start gap-3";
+    typingIndicator.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-stone-900 flex items-center justify-center text-white flex-shrink-0">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"></path><path d="M12 8v4l3 3"></path><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none"></circle></svg>
+        </div>
+        <div class="bg-stone-100 rounded-2xl px-4 py-3 flex items-center gap-1.5">
+            <span class="typing-dot w-1.5 h-1.5 rounded-full bg-stone-400"></span>
+            <span class="typing-dot w-1.5 h-1.5 rounded-full bg-stone-400"></span>
+            <span class="typing-dot w-1.5 h-1.5 rounded-full bg-stone-400"></span>
+        </div>
+    `;
+    dom.aiMessages.appendChild(typingIndicator);
+    dom.aiMessages.scrollTop = dom.aiMessages.scrollHeight;
+
     const reply = buildAssistantReply({ view, text, state, assistantConfigs });
     setTimeout(() => {
+        typingIndicator.remove();
         const targetMessages =
             view === "project"
-                ? getSelectedProject(state)?.bayMessages
+                ? state.selectedProjectId
+                    ? state.projectMessagesByProjectId[state.selectedProjectId]
+                    : null
                 : state.messagesByView[view];
         if (!targetMessages) return;
 
@@ -528,11 +731,11 @@ function sendMessage(textOverride?: string) {
     }, 500);
 }
 
-function sendProjectSetupMessage() {
+function sendProjectSetupMessage(textOverride?: string) {
     const input = document.getElementById("projectSetupInput") as HTMLTextAreaElement | null;
     if (!input) return;
 
-    const text = input.value.trim();
+    const text = (textOverride ?? input.value).trim();
     if (!text) return;
 
     actions.submitProjectSetupInput(state, text);
@@ -541,12 +744,165 @@ function sendProjectSetupMessage() {
     render();
 }
 
-function addModalSubtask(taskId) {
+async function runMutation(mutation, args, fallbackMessage = "Could not save change.") {
+    if (!convexClient) return null;
+
+    try {
+        return await convexClient.mutation(mutation, args);
+    } catch (error) {
+        console.error(error);
+        showToast(fallbackMessage);
+        return null;
+    }
+}
+
+async function createTask(title: string) {
+    const resolvedDueAt =
+        state.currentView === "today"
+            ? TODAY_ISO
+            : null;
+    const projectId = state.currentView === "project" ? state.selectedProjectId : null;
+
+    await runMutation(
+        api.tasks.create,
+        {
+            title,
+            description:
+                state.currentView === "project"
+                    ? "New project task added from the project view."
+                    : state.currentView === "inbox"
+                      ? "New inbox item waiting to be triaged."
+                      : "New task added from the quick entry field. Open it to add more detail.",
+            dueAt: resolvedDueAt ?? undefined,
+            projectId: projectId ?? undefined,
+        },
+        "Could not create task.",
+    );
+}
+
+async function saveTaskEdit() {
+    if (!state.editingTaskId || !state.editingTaskDraft) return;
+
+    const trimmedTitle = state.editingTaskDraft.title.trim();
+    if (!trimmedTitle) return;
+
+    const didSave = await runMutation(
+        api.tasks.update,
+        {
+            taskId: state.editingTaskId,
+            title: trimmedTitle,
+            description: state.editingTaskDraft.description.trim(),
+        },
+        "Could not save task.",
+    );
+
+    if (didSave !== null) {
+        actions.cancelTaskCardEdit(state);
+        renderMainView();
+    }
+}
+
+async function addModalSubtask(taskId) {
     const value = state.modalSubtaskDraft.trim();
     if (!value) return;
 
-    actions.addTaskSubtask(state, taskId, value);
+    const didAdd = await runMutation(
+        api.tasks.addSubtask,
+        {
+            taskId,
+            title: value,
+        },
+        "Could not add subtask.",
+    );
+
+    if (didAdd !== null) {
+        actions.closeModalSubtaskComposer(state);
+        updateTaskModal();
+    }
+}
+
+async function createProjectFromDraft() {
+    const draft = state.projectSetup.draft;
+    if (!draft) return;
+
+    const createdProject = await runMutation(
+        api.projects.create,
+        {
+            name: draft.name.trim(),
+            deadline: parseProjectDeadlineInput(draft.deadline) || draft.deadline,
+            summary: draft.summary.trim(),
+            nextStep: draft.nextStep.trim(),
+            starterTasks: draft.tasks.map((task, index) => ({
+                title: task.title.trim(),
+                description: task.description?.trim() || "",
+                dueAt: index === 0 ? TODAY_ISO : undefined,
+                priority: index === 0 ? "high" : "medium",
+            })),
+        },
+        "Could not create project.",
+    );
+
+    if (!createdProject) return;
+
+    actions.closeProjectSetup(state);
+    state.currentView = "project";
+    state.selectedProjectId = createdProject.id;
+    state.assistantOpen = true;
     render();
+}
+
+function getVisibleTaskIds(listId) {
+    if (listId === "inbox") {
+        return getInboxTasks(state).map((task) => task.id);
+    }
+
+    if (listId === "today-todo") {
+        return getTodayTasks(state).map((task) => task.id);
+    }
+
+    if (listId === "today-completed") {
+        return getCompletedTasks(state).map((task) => task.id);
+    }
+
+    if (listId === "project-todo") {
+        return state.selectedProjectId ? getProjectTasks(state, state.selectedProjectId).map((task) => task.id) : [];
+    }
+
+    if (listId === "project-completed") {
+        return state.selectedProjectId
+            ? getProjectCompletedTasks(state, state.selectedProjectId).map((task) => task.id)
+            : [];
+    }
+
+    const upcomingGroups = getUpcomingGroups(state);
+    if (listId === "upcoming-tomorrow") {
+        return upcomingGroups.tomorrow.map((task) => task.id);
+    }
+    if (listId === "upcoming-this-week") {
+        return upcomingGroups["this-week"].map((task) => task.id);
+    }
+    if (listId === "upcoming-later") {
+        return upcomingGroups.later.map((task) => task.id);
+    }
+
+    return [];
+}
+
+function getReorderNeighbors(listId, draggedTaskId, targetTaskId, placement) {
+    const visibleIds = getVisibleTaskIds(listId).filter((taskId) => taskId !== draggedTaskId);
+    const targetIndex = visibleIds.indexOf(targetTaskId);
+    if (targetIndex === -1) {
+        return { beforeTaskId: undefined, afterTaskId: undefined };
+    }
+
+    const insertIndex = placement === "after" ? targetIndex + 1 : targetIndex;
+    visibleIds.splice(insertIndex, 0, draggedTaskId);
+
+    const movedIndex = visibleIds.indexOf(draggedTaskId);
+    return {
+        beforeTaskId: movedIndex > 0 ? visibleIds[movedIndex - 1] : undefined,
+        afterTaskId: movedIndex < visibleIds.length - 1 ? visibleIds[movedIndex + 1] : undefined,
+    };
 }
 
 function focusModalSubtaskInput() {
@@ -594,14 +950,13 @@ document.addEventListener("keydown", (event) => {
     if (event.key === "Tab") {
         const dialog = dom.taskModal.querySelector('[role="dialog"]') as HTMLElement | null;
         if (dialog) { trapFocus(dialog, event); return; }
-        const setupDialog = dom.projectSetupModal.querySelector('[role="dialog"]') as HTMLElement | null;
-        if (setupDialog) { trapFocus(setupDialog, event); return; }
     }
 
     if ((event.key === "Enter" || event.key === " ") && (target as HTMLElement)?.dataset?.action === "open-task") {
         event.preventDefault();
         const taskId = (target as HTMLElement).dataset.taskId;
         if (taskId) {
+            lastModalTrigger = target as HTMLElement;
             actions.openTaskModal(state, taskId);
             closeMobileChrome();
             updateTaskModal(true);
@@ -632,20 +987,57 @@ document.addEventListener("keydown", (event) => {
         return;
     }
 
+    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && (event.ctrlKey || event.metaKey)) {
+        const row = (target as HTMLElement)?.closest?.(".task-row[draggable='true']") as HTMLElement | null;
+        if (row && row.dataset.taskId && row.dataset.taskList) {
+            event.preventDefault();
+            const listId = row.dataset.taskList;
+            const taskId = row.dataset.taskId;
+            const visibleIds = getVisibleTaskIds(listId);
+            const currentIndex = visibleIds.indexOf(taskId);
+            if (currentIndex === -1) return;
+
+            const direction = event.key === "ArrowUp" ? -1 : 1;
+            const neighborIndex = currentIndex + direction;
+            if (neighborIndex < 0 || neighborIndex >= visibleIds.length) return;
+
+            const neighborId = visibleIds[neighborIndex];
+            const placement = direction === -1 ? "before" : "after";
+            const { beforeTaskId, afterTaskId } = getReorderNeighbors(listId, taskId, neighborId, placement);
+
+            suppressNextTaskListAnimation = true;
+            void runMutation(
+                api.tasks.reorder,
+                {
+                    taskId,
+                    beforeTaskId,
+                    afterTaskId,
+                    listKey: listId,
+                    todayIso: TODAY_ISO,
+                },
+                "Could not reorder task.",
+            ).then(() => {
+                requestAnimationFrame(() => {
+                    const movedRow = document.querySelector(`.task-row[data-task-id="${taskId}"]`) as HTMLElement | null;
+                    movedRow?.focus();
+                });
+            });
+            return;
+        }
+    }
+
     if (target?.id === "taskInput" && event.key === "Enter") {
         event.preventDefault();
         const value = target.value.trim();
         if (!value) return;
-        actions.addTask(state, value);
+        void createTask(value);
         target.value = "";
-        render();
         return;
     }
 
     if (target?.dataset.action === "edit-task-title" && event.key === "Enter") {
         event.preventDefault();
-        actions.saveTaskCardEdit(state);
-        renderMainView();
+        void saveTaskEdit();
         return;
     }
 
@@ -655,8 +1047,7 @@ document.addEventListener("keydown", (event) => {
         (event.metaKey || event.ctrlKey)
     ) {
         event.preventDefault();
-        actions.saveTaskCardEdit(state);
-        renderMainView();
+        void saveTaskEdit();
         return;
     }
 
@@ -682,13 +1073,8 @@ document.addEventListener("input", (event) => {
     const target = event.target as HTMLInputElement | HTMLTextAreaElement | null;
     if (!target) return;
 
-    if (target.id === "modalTitleInput") {
-        actions.updateTaskField(state, target.dataset.taskId, "title", target.value);
-        return;
-    }
-
     if (target.id === "modalDescriptionInput") {
-        actions.updateTaskField(state, target.dataset.taskId, "description", target.value);
+        autoResize(target);
         return;
     }
 
@@ -700,11 +1086,6 @@ document.addEventListener("input", (event) => {
     if (target.dataset.action === "edit-task-description") {
         actions.updateTaskCardDraftField(state, "description", target.value);
         autoResize(target);
-        return;
-    }
-
-    if (target.dataset.action === "edit-subtask-title") {
-        actions.updateSubtaskTitle(state, target.dataset.taskId, target.dataset.subtaskId, target.value);
         return;
     }
 
@@ -750,21 +1131,88 @@ document.addEventListener("change", (event) => {
     const target = event.target as HTMLInputElement | HTMLSelectElement | null;
     if (!target) return;
 
+    if (target.id === "modalTitleInput") {
+        const title = target.value.trim();
+        if (!title) {
+            showToast("Task title cannot be empty.");
+            return;
+        }
+
+        void runMutation(
+            api.tasks.update,
+            {
+                taskId: target.dataset.taskId,
+                title,
+            },
+            "Could not update task title.",
+        );
+        return;
+    }
+
+    if (target.id === "modalDescriptionInput") {
+        void runMutation(
+            api.tasks.update,
+            {
+                taskId: target.dataset.taskId,
+                description: target.value,
+            },
+            "Could not update task description.",
+        );
+        return;
+    }
+
+    if (target.dataset.action === "edit-subtask-title") {
+        const title = target.value.trim();
+        if (!title) {
+            showToast("Subtask title cannot be empty.");
+            return;
+        }
+
+        void runMutation(
+            api.tasks.updateSubtask,
+            {
+                taskId: target.dataset.taskId,
+                subtaskId: target.dataset.subtaskId,
+                title,
+            },
+            "Could not update subtask.",
+        );
+        return;
+    }
+
     if (target.dataset.action === "change-task-project") {
-        actions.updateTaskProject(state, target.dataset.taskId, target.value);
-        updateTaskModal();
+        void runMutation(
+            api.tasks.update,
+            {
+                taskId: target.dataset.taskId,
+                projectId: target.value || null,
+            },
+            "Could not move task.",
+        );
         return;
     }
 
     if (target.dataset.action === "change-task-due-date") {
-        actions.updateTaskDueDate(state, target.dataset.taskId, target.value);
-        updateTaskModal();
+        void runMutation(
+            api.tasks.update,
+            {
+                taskId: target.dataset.taskId,
+                dueAt: target.value || null,
+            },
+            "Could not update due date.",
+        );
         return;
     }
 
     if (target.dataset.action === "change-task-priority") {
-        actions.updateTaskPriority(state, target.dataset.taskId, target.value);
-        updateTaskModal();
+        void runMutation(
+            api.tasks.update,
+            {
+                taskId: target.dataset.taskId,
+                priority: target.value || "none",
+            },
+            "Could not update priority.",
+        );
     }
 });
 
@@ -817,20 +1265,39 @@ document.addEventListener("click", (event) => {
     if (action === "schedule-task") {
         const label = destinationLabels[destination] || destination;
         const row = actionElement.closest(".task-row") as HTMLElement | null;
-        const doSchedule = () => {
+        const doSchedule = async () => {
             const prevDueAt = state.tasks.find((t) => t.id === taskId)?.dueAt || null;
-            actions.scheduleInboxTask(state, taskId, destination);
-            render();
+            const resolvedDueAt = getDateFromInboxDestination(destination);
+
+            const didSchedule = await runMutation(
+                api.tasks.update,
+                {
+                    taskId,
+                    dueAt: resolvedDueAt,
+                },
+                "Could not schedule task.",
+            );
+
+            if (didSchedule === null) return;
+
             showToast(`scheduled for ${label}`, () => {
-                actions.unscheduleTask(state, taskId, prevDueAt);
-                render();
+                void runMutation(
+                    api.tasks.update,
+                    {
+                        taskId,
+                        dueAt: prevDueAt,
+                    },
+                    "Could not undo scheduling.",
+                );
             });
         };
         if (row) {
             row.classList.add("task-removing");
-            setTimeout(doSchedule, 250);
+            setTimeout(() => {
+                void doSchedule();
+            }, 250);
         } else {
-            doSchedule();
+            void doSchedule();
         }
         return;
     }
@@ -842,19 +1309,33 @@ document.addEventListener("click", (event) => {
         if (row) {
             row.classList.add("task-completing");
         }
-        actions.toggleTask(state, taskId);
-        render();
+        const task = state.tasks.find((item) => item.id === taskId);
+        if (!task) return;
+        void runMutation(
+            api.tasks.setStatus,
+            {
+                taskId,
+                status: task.status === "todo" ? "completed" : "todo",
+            },
+            "Could not update task status.",
+        );
         return;
     }
 
     if (action === "toggle-subtask") {
-        actions.toggleSubtask(state, taskId, actionElement.dataset.subtaskId);
-        render();
+        void runMutation(
+            api.tasks.toggleSubtask,
+            {
+                taskId,
+                subtaskId: actionElement.dataset.subtaskId,
+            },
+            "Could not update subtask.",
+        );
         return;
     }
 
     if (action === "add-subtask") {
-        addModalSubtask(taskId);
+        void addModalSubtask(taskId);
         return;
     }
 
@@ -872,8 +1353,31 @@ document.addEventListener("click", (event) => {
     }
 
     if (action === "remove-subtask") {
-        actions.removeSubtask(state, taskId, actionElement.dataset.subtaskId);
-        render();
+        void runMutation(
+            api.tasks.removeSubtask,
+            {
+                taskId,
+                subtaskId: actionElement.dataset.subtaskId,
+            },
+            "Could not remove subtask.",
+        );
+        return;
+    }
+
+    if (action === "delete-task") {
+        if (!window.confirm("Delete this task?")) return;
+
+        void runMutation(
+            api.tasks.remove,
+            {
+                taskId,
+            },
+            "Could not delete task.",
+        ).then((result) => {
+            if (result === null) return;
+            actions.closeTaskModal(state);
+            render();
+        });
         return;
     }
 
@@ -885,8 +1389,7 @@ document.addEventListener("click", (event) => {
     }
 
     if (action === "save-task-edit") {
-        actions.saveTaskCardEdit(state);
-        renderMainView();
+        void saveTaskEdit();
         return;
     }
 
@@ -898,6 +1401,7 @@ document.addEventListener("click", (event) => {
 
     if (action === "open-task") {
         if (dragState.justDragged) return;
+        lastModalTrigger = actionElement;
         actions.openTaskModal(state, taskId);
         closeMobileChrome();
         updateTaskModal(true);
@@ -945,20 +1449,33 @@ document.addEventListener("click", (event) => {
         return;
     }
 
+    if (action === "project-setup-suggestion") {
+        sendProjectSetupMessage(suggestion);
+        return;
+    }
+
     if (action === "confirm-project-draft") {
-        actions.confirmProjectDraft(state);
-        render();
+        void createProjectFromDraft();
+        return;
+    }
+
+    if (action === "archive-project") {
+        const projectId = actionElement.dataset.projectId;
+        if (!projectId) return;
+        if (!window.confirm("Archive this project and move its tasks back to inbox/projectless lists?")) return;
+
+        void runMutation(
+            api.projects.archive,
+            {
+                projectId,
+            },
+            "Could not archive project.",
+        );
         return;
     }
 
     if (action === "send-message") {
         sendMessage();
-        return;
-    }
-
-    if (action === "reset-inbox") {
-        actions.resetInbox(state, initialTasks);
-        render();
         return;
     }
 
@@ -1041,12 +1558,27 @@ document.addEventListener("drop", (event) => {
 
     const rect = row.getBoundingClientRect();
     const placement = event.clientY > rect.top + rect.height / 2 ? "after" : "before";
+    const { beforeTaskId, afterTaskId } = getReorderNeighbors(
+        row.dataset.taskList,
+        dragState.taskId,
+        row.dataset.taskId,
+        placement,
+    );
 
-    actions.reorderTask(state, dragState.taskId, row.dataset.taskId, placement);
     suppressNextTaskListAnimation = true;
     dragState.justDragged = true;
     clearTaskDropIndicators();
-    render();
+    void runMutation(
+        api.tasks.reorder,
+        {
+            taskId: dragState.taskId,
+            beforeTaskId,
+            afterTaskId,
+            listKey: row.dataset.taskList,
+            todayIso: TODAY_ISO,
+        },
+        "Could not reorder task.",
+    );
 });
 
 document.addEventListener("dragend", () => {

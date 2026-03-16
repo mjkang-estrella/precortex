@@ -1,5 +1,9 @@
 import { AuthConfig } from "convex/server";
 
+declare const process: {
+    env: Record<string, string | undefined>;
+};
+
 export default {
     providers: [
         {
@@ -8,4 +12,3 @@ export default {
         },
     ],
 } satisfies AuthConfig;
-

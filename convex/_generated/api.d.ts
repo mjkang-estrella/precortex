@@ -9,6 +9,11 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as debug from "../debug.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as lib_domain from "../lib/domain.js";
+import type * as projects from "../projects.js";
+import type * as tasks from "../tasks.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +23,11 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  debug: typeof debug;
+  "lib/auth": typeof lib_auth;
+  "lib/domain": typeof lib_domain;
+  projects: typeof projects;
+  tasks: typeof tasks;
 }>;
 
 /**

@@ -28,25 +28,26 @@ export function renderTodayView({ todoTasks, completedTasks, editingTaskId, edit
                             : '<div class="rounded-3xl border border-dashed border-stone-300 bg-stone-50/70 p-6 text-[14px] text-stone-500 lowercase">No overdue or due-today tasks right now.</div>'
                     }
                 </div>
-                <div class="flex items-center gap-4 mt-10 mb-3">
-                    <h2 class="text-[11px] font-medium text-stone-500 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</h2>
-                    <div class="h-px bg-stone-100 flex-1"></div>
-                </div>
-                <div class="flex flex-col gap-2">
-                    ${
-                        completedTasks.length
-                            ? completedTasks
-                                  .map((task, i) =>
-                                      renderTaskCard(task, {
-                                          index: i,
-                                          listId: "today-completed",
-                                          editingDraft: editingTaskId === task.id ? editingTaskDraft : null,
-                                      }),
-                                  )
-                                  .join("")
-                            : '<div class="text-[13px] text-stone-500 lowercase">No completed tasks yet.</div>'
-                    }
-                </div>
+                ${completedTasks.length ? `
+                <details class="mt-8" open>
+                    <summary class="flex items-center gap-4 mb-3 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+                        <h2 class="text-[11px] font-medium text-stone-400 lowercase tracking-widest flex-shrink-0">completed (${completedTasks.length})</h2>
+                        <div class="h-px bg-stone-100 flex-1"></div>
+                        <svg class="w-3.5 h-3.5 text-stone-300 transition-transform details-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </summary>
+                    <div class="flex flex-col gap-1">
+                        ${completedTasks
+                              .map((task, i) =>
+                                  renderTaskCard(task, {
+                                      index: i,
+                                      listId: "today-completed",
+                                      editingDraft: editingTaskId === task.id ? editingTaskDraft : null,
+                                  }),
+                              )
+                              .join("")}
+                    </div>
+                </details>
+                ` : ''}
             </div>
         </div>
     `;

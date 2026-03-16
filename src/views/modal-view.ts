@@ -62,7 +62,7 @@ export function renderTaskModal({
                         ${task.status === "completed" ? "mark incomplete" : "mark complete"}
                     </button>
                     <div class="w-px h-4 bg-stone-200"></div>
-                    <span class="text-[13px] text-stone-400 lowercase">${escapeHtml(task.projectName || "inbox")}</span>
+                    <span class="text-[13px] text-stone-500 lowercase">${escapeHtml(task.projectName || "inbox")}</span>
                 </div>
                 <div class="flex items-center gap-2">
                     <button data-action="close-modal" aria-label="close task details" class="w-8 h-8 flex items-center justify-center rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-900 transition-colors" type="button">
@@ -86,7 +86,7 @@ export function renderTaskModal({
                                     : ""
                             }
                         </button>
-                        <textarea id="modalTitleInput" data-task-id="${task.id}" aria-label="task title" class="font-display text-3xl text-stone-900 w-full outline-none resize-none bg-transparent placeholder-stone-300 tracking-tight" rows="2" placeholder="task name">${escapeHtml(task.title)}</textarea>
+                        <textarea id="modalTitleInput" data-task-id="${task.id}" aria-label="task title" class="font-display text-3xl text-stone-900 w-full outline-none resize-none bg-transparent placeholder-stone-400 tracking-tight" rows="2" placeholder="task name">${escapeHtml(task.title)}</textarea>
                     </div>
                     <div class="pl-[38px] flex flex-col gap-2">
                         <textarea id="modalDescriptionInput" data-task-id="${task.id}" aria-label="task description" class="w-full bg-transparent text-[15px] leading-relaxed text-stone-600 outline-none resize-none min-h-[100px] placeholder-stone-400" placeholder="add a description...">${escapeHtml(task.description || "")}</textarea>
@@ -138,7 +138,7 @@ export function renderTaskModal({
                                         <input data-action="edit-subtask-title" data-task-id="${task.id}" data-subtask-id="${subtask.id}" aria-label="subtask title" class="flex-1 min-w-0 bg-transparent border-none outline-none p-0 pt-1.5 text-[14px] ${
                                             subtask.done ? "text-stone-500 line-through" : "text-stone-800"
                                         }" value="${escapeHtml(subtask.title)}">
-                                        <button data-action="remove-subtask" data-task-id="${task.id}" data-subtask-id="${subtask.id}" class="opacity-0 pointer-events-none group-hover/subtask:opacity-100 group-hover/subtask:pointer-events-auto w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-stone-900 transition-all flex-shrink-0" aria-label="remove subtask" type="button">
+                                        <button data-action="remove-subtask" data-task-id="${task.id}" data-subtask-id="${subtask.id}" class="opacity-0 pointer-events-none group-hover/subtask:opacity-100 group-hover/subtask:pointer-events-auto focus:opacity-100 focus:pointer-events-auto w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-stone-900 transition-all flex-shrink-0 touch-action-auto" aria-label="remove subtask" type="button">
                                             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path></svg>
                                         </button>
                                     </div>
@@ -173,6 +173,9 @@ export function renderTaskModal({
                     </div>
                     <div class="mt-auto pt-6 flex flex-col gap-3 border-t border-stone-200/60">
                         <span class="text-[11px] font-medium text-stone-500 lowercase">${escapeHtml(task.createdLabel || "created recently")}</span>
+                        <button data-action="delete-task" data-task-id="${task.id}" class="w-full px-3 py-2 rounded-xl border border-red-200 text-[13px] font-medium text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors lowercase" type="button">
+                            delete task
+                        </button>
                     </div>
                 </div>
             </div>

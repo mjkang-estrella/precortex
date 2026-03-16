@@ -95,20 +95,17 @@ function renderInboxTaskRow(task, index = 0, editingDraft = null) {
                 </div>
             </div>
             <div class="xl:ml-auto flex items-center gap-1.5 opacity-100 xl:opacity-0 group-hover:opacity-100 transition-opacity xl:w-auto w-full pl-[38px] xl:pl-0 pt-2 xl:pt-0 border-t border-stone-100 xl:border-none mt-2 xl:mt-0">
-                <button data-action="schedule-task" data-task-id="${task.id}" data-destination="today" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl border border-stone-200 bg-white text-stone-500 hover:text-stone-900 hover:border-stone-400 hover:shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
-                    <svg class="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                <button data-action="schedule-task" data-task-id="${task.id}" data-destination="today" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl bg-stone-900 text-white hover:bg-stone-700 shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                     today
                 </button>
                 <button data-action="schedule-task" data-task-id="${task.id}" data-destination="tomorrow" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl border border-stone-200 bg-white text-stone-500 hover:text-stone-900 hover:border-stone-400 hover:shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
-                    <svg class="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
                     tmrw
                 </button>
                 <button data-action="schedule-task" data-task-id="${task.id}" data-destination="next-week" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl border border-stone-200 bg-white text-stone-500 hover:text-stone-900 hover:border-stone-400 hover:shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
-                    <svg class="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line><path d="m9 16 2 2 4-4"></path></svg>
                     next wk
                 </button>
                 <button data-action="schedule-task" data-task-id="${task.id}" data-destination="later" class="flex-1 xl:flex-none px-3 py-2 xl:py-1.5 text-[12px] font-medium rounded-xl border border-stone-200 bg-white text-stone-500 hover:text-stone-900 hover:border-stone-400 hover:shadow-sm flex items-center justify-center gap-1.5 transition-all lowercase active:scale-95" type="button">
-                    <svg class="w-3.5 h-3.5 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="3" rx="2" ry="2"></rect><rect width="20" height="8" x="2" y="13" rx="2" ry="2"></rect><line x1="8" x2="8" y1="3" y2="11"></line><line x1="8" x2="8" y1="13" y2="21"></line></svg>
                     later
                 </button>
             </div>
@@ -125,21 +122,15 @@ export function renderInboxView({ inboxTasks, editingTaskId, editingTaskDraft })
             <header class="px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8 flex-shrink-0 z-10 bg-white">
                 <h1 class="font-display text-4xl sm:text-5xl tracking-tight lowercase flex items-baseline gap-4">
                     inbox
-                    <span class="text-sm text-stone-400 font-sans font-medium tracking-wider">${countLabel}</span>
+                    <span class="text-sm text-stone-500 font-sans font-medium tracking-wider">${countLabel}</span>
                 </h1>
             </header>
-            ${
-                count
-                    ? `
-                <div class="px-4 pb-4 sm:px-6 sm:pb-5 lg:px-10 lg:pb-6 flex-shrink-0 z-10 bg-white">
-                    <div class="group flex items-center gap-3 bg-stone-50 rounded-2xl px-5 py-4 border border-stone-200/60 focus-within:border-stone-400 focus-within:bg-white focus-within:shadow-sm transition-all">
-                        <svg class="w-5 h-5 text-stone-400 group-focus-within:text-stone-900 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        <input id="taskInput" type="text" aria-label="add task to inbox" class="flex-1 bg-transparent border-none outline-none text-[15px] placeholder-stone-400 text-stone-900" placeholder="add to inbox to sort later...">
-                    </div>
+            <div class="px-4 pb-4 sm:px-6 sm:pb-5 lg:px-10 lg:pb-6 flex-shrink-0 z-10 bg-white">
+                <div class="group flex items-center gap-3 bg-stone-50 rounded-2xl px-5 py-4 border border-stone-200/60 focus-within:border-stone-400 focus-within:bg-white focus-within:shadow-sm transition-all">
+                    <svg class="w-5 h-5 text-stone-400 group-focus-within:text-stone-900 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <input id="taskInput" type="text" aria-label="add task to inbox" class="flex-1 bg-transparent border-none outline-none text-[15px] placeholder-stone-400 text-stone-900" placeholder="add to inbox to sort later...">
                 </div>
-            `
-                    : ""
-            }
+            </div>
             <div class="flex-1 overflow-y-auto px-4 pb-24 sm:px-6 sm:pb-10 lg:px-10 flex flex-col relative">
                 ${
                     count
@@ -163,9 +154,6 @@ export function renderInboxView({ inboxTasks, editingTaskId, editingTaskDraft })
                         </div>
                         <h2 class="font-display text-3xl text-stone-900 mb-2 lowercase tracking-tight">inbox zero. nice work.</h2>
                         <p class="text-stone-500 text-sm max-w-[280px] lowercase leading-relaxed">you've triaged all your unscheduled tasks. enjoy the peace of mind.</p>
-                        <button data-action="reset-inbox" class="mt-8 px-6 py-2.5 rounded-xl bg-stone-900 text-white text-sm font-medium hover:scale-105 transition-transform shadow-sm lowercase" type="button">
-                            bring them back
-                        </button>
                     </div>
                 `
                 }

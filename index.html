@@ -7,38 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com/3.4.17" vid="5"></script>
-    <script vid="6">
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
-                        display: ['"DM Serif Display"', 'Georgia', 'serif'],
-                    },
-                    colors: {
-                        stone: {
-                            50: '#f6f6f5',
-                            100: '#efefec',
-                            200: '#e3e3df',
-                            300: '#cfcfc8',
-                            400: '#b3b3a9',
-                            500: '#9b9b8f',
-                            600: '#828276',
-                            700: '#6b6b61',
-                            800: '#585850',
-                            900: '#111111', 
-                        }
-                    },
-                    boxShadow: {
-                        'soft': '0 4px 24px -6px rgba(0, 0, 0, 0.03)',
-                        'float': '0 8px 32px -8px rgba(0, 0, 0, 0.08)',
-                        'modal': '0 24px 48px -12px rgba(0, 0, 0, 0.15)',
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="./dist/tailwind.css">
     <link rel="stylesheet" href="./styles/app.css">
 </head>
 <body class="bg-stone-100 text-stone-900 antialiased selection:bg-stone-900 selection:text-white tracking-tight" vid="8">
@@ -49,7 +18,7 @@
     <div id="appShell" class="hidden h-screen w-screen overflow-hidden lg:items-center lg:justify-center lg:gap-6 lg:p-4 xl:p-6">
         <div id="mobileDrawerBackdrop" data-action="close-drawers" class="fixed inset-0 z-30 bg-stone-900/30 backdrop-blur-[2px] opacity-0 pointer-events-none transition-opacity duration-300 lg:hidden"></div>
 
-        <aside id="mobileNav" class="inset-y-0 left-0 z-40 w-[280px] max-w-[85vw] flex-shrink-0 flex flex-col gap-4 bg-stone-100 p-3 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:static lg:translate-x-0 lg:w-[260px] lg:max-w-none lg:h-full lg:bg-transparent lg:p-0 lg:gap-6" vid="9">
+        <aside id="mobileNav" class="inset-y-0 left-0 z-40 w-[280px] max-w-[85vw] flex-shrink-0 flex flex-col gap-4 bg-stone-100 p-3 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform lg:static lg:translate-x-0 lg:w-[260px] lg:max-w-none lg:h-full lg:bg-transparent lg:p-0 lg:gap-6" vid="9">
             <div id="workspaceCard"></div>
 
         
@@ -91,7 +60,7 @@
         </main>
 
     
-        <aside id="assistantPanel" class="inset-y-0 right-0 z-40 w-[340px] max-w-[92vw] flex-shrink-0 bg-white shadow-soft flex flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-right lg:static lg:relative lg:h-full lg:max-w-none lg:rounded-[32px] lg:translate-x-0" vid="188">
+        <aside id="assistantPanel" class="inset-y-0 right-0 z-40 w-[340px] max-w-[92vw] flex-shrink-0 bg-white shadow-soft flex flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform origin-right lg:static lg:relative lg:h-full lg:max-w-none lg:rounded-[32px] lg:translate-x-0" vid="188">
         
         
         <div class="px-6 py-5 flex items-center justify-between border-b border-stone-100 bg-white z-10" vid="189">
@@ -109,8 +78,8 @@
             </button>
         </div>
 
-        <div class="bg-stone-50/50 p-5 border-b border-stone-100" vid="203">
-            <div id="assistantQuickActionsLabel" class="text-[11px] font-semibold text-stone-500 lowercase tracking-wider mb-3" vid="204">quick actions</div>
+        <div class="bg-stone-100/70 p-5 border-b border-stone-200/60" vid="203">
+            <div id="assistantQuickActionsLabel" class="text-[11px] font-semibold text-stone-600 lowercase tracking-wider mb-3" vid="204">try asking</div>
             <div id="assistantQuickActions" class="flex flex-col gap-2" vid="205"></div>
         </div>
 
@@ -144,9 +113,8 @@
         </svg>
         </button>
 
-        <div id="toastContainer" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] flex flex-col items-center gap-2 pointer-events-none"></div>
+        <div id="toastContainer" role="status" aria-live="polite" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] flex flex-col items-center gap-2 pointer-events-none"></div>
         <div id="taskModal" class="hidden fixed inset-0 z-50 items-center justify-center p-6"></div>
-        <div id="projectSetupModal" class="hidden fixed inset-0 z-50 items-center justify-center p-6"></div>
     </div>
 
     <script src="./dist/config.js"></script>

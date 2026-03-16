@@ -10,34 +10,21 @@ import {
     toLocalISODate,
 } from "../utils/date.js";
 
-export function cloneTask(task) {
-    return {
-        ...task,
-        tags: task.tags.map((tag) => ({ ...tag })),
-        subtasks: task.subtasks.map((subtask) => ({ ...subtask })),
-    };
-}
+function getCreatedLabel(createdAt) {
+    if (!createdAt) return "added recently";
 
-export function cloneProject(project) {
-    return {
-        ...project,
-        bayMessages: project.bayMessages.map((message) => ({
-            ...message,
-            tasks: message.tasks.map((task) => ({ ...task })),
-        })),
-    };
-}
+    const diffMs = TODAY.getTime() - new Date(createdAt).getTime();
+    const hours = Math.round(diffMs / (60 * 60 * 1000));
 
-export function sortTasksByDueDate(tasks) {
-    return [...tasks].sort((left, right) => {
-        const leftValue = left.dueAt
-            ? parseLocalISODate(left.dueAt).getTime()
-            : Number.POSITIVE_INFINITY;
-        const rightValue = right.dueAt
-            ? parseLocalISODate(right.dueAt).getTime()
-            : Number.POSITIVE_INFINITY;
-        return leftValue - rightValue || left.title.localeCompare(right.title);
-    });
+    if (hours <= 0) return "added just now";
+    if (hours === 1) return "added 1 hour ago";
+    if (hours < 24) return `added ${hours} hours ago`;
+
+    const days = Math.round(hours / 24);
+    if (days === 1) return "added yesterday";
+    if (days < 7) return `added ${days} days ago`;
+
+    return "added recently";
 }
 
 function decorateTask(state, task) {
@@ -45,6 +32,7 @@ function decorateTask(state, task) {
     return {
         ...task,
         projectName: project?.name || "inbox",
+        createdLabel: getCreatedLabel(task.createdAt),
     };
 }
 
@@ -168,12 +156,6 @@ export function getDateFromInboxDestination(destination) {
     return toLocalISODate(addDays(TODAY, 30));
 }
 
-export function getInboxSeedTasks(initialTasks) {
-    return initialTasks
-        .filter((task) => task.status === "todo" && !task.dueAt && !task.projectId)
-        .map(cloneTask);
-}
-
 export function getProjects(state) {
     return [...state.projects];
 }
@@ -200,7 +182,9 @@ export function getProjectCompletedTasks(state, projectId) {
 
 export function getCurrentAssistantMessages(state) {
     if (state.currentView === "project") {
-        return getSelectedProject(state)?.bayMessages || [];
+        return state.selectedProjectId
+            ? state.projectMessagesByProjectId[state.selectedProjectId] || []
+            : [];
     }
 
     return state.messagesByView[state.currentView] || [];
