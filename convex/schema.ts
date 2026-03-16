@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { planTypeValue, projectBriefValue, routineValue } from "./lib/projectCopilot.js";
 
 const priorityValue = v.union(
     v.literal("none"),
@@ -28,6 +29,9 @@ export default defineSchema({
         deadline: v.optional(v.string()),
         summary: v.string(),
         nextStep: v.string(),
+        planType: v.optional(planTypeValue),
+        brief: v.optional(projectBriefValue),
+        routine: v.optional(routineValue),
         source: v.optional(v.union(v.literal("seed"), v.literal("user"))),
         archivedAt: v.optional(v.number()),
         createdAt: v.number(),

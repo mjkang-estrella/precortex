@@ -5,7 +5,7 @@ import { createAssistantConfigs } from "./data/assistant.js";
 import { assistantIcons } from "./data/assistant.js";
 import { getAppConfig } from "./config.js";
 import * as actions from "./state/actions.js";
-import { parseProjectDeadlineInput } from "./state/project-bay.js";
+import { getProjectSetupSelectedMode } from "./state/project-bay.js";
 import { buildAssistantReply } from "./state/assistant-replies.js";
 import {
     getCompletedTasks,
@@ -463,6 +463,10 @@ function render() {
         state.pendingUpcomingScrollTarget = null;
         requestAnimationFrame(() => scrollUpcomingTargetIntoView(target));
     }
+
+    if (state.currentView === "project-setup") {
+        void maybeBootstrapProjectSetup();
+    }
 }
 
 function isModalInputFocused() {
@@ -505,6 +509,10 @@ function renderAfterDataSync() {
     }
 
     renderChrome();
+
+    if (state.currentView === "project-setup") {
+        void maybeBootstrapProjectSetup();
+    }
 }
 
 function closeConvexClient() {
@@ -731,19 +739,6 @@ function sendMessage(textOverride?: string) {
     }, 500);
 }
 
-function sendProjectSetupMessage(textOverride?: string) {
-    const input = document.getElementById("projectSetupInput") as HTMLTextAreaElement | null;
-    if (!input) return;
-
-    const text = (textOverride ?? input.value).trim();
-    if (!text) return;
-
-    actions.submitProjectSetupInput(state, text);
-    input.value = "";
-    input.style.height = "auto";
-    render();
-}
-
 async function runMutation(mutation, args, fallbackMessage = "Could not save change.") {
     if (!convexClient) return null;
 
@@ -754,6 +749,75 @@ async function runMutation(mutation, args, fallbackMessage = "Could not save cha
         showToast(fallbackMessage);
         return null;
     }
+}
+
+async function runAction(action, args, fallbackMessage = "Could not complete action.") {
+    if (!convexClient) return null;
+
+    try {
+        return await convexClient.action(action, args);
+    } catch (error) {
+        console.error(error);
+        showToast(fallbackMessage);
+        return null;
+    }
+}
+
+function getProjectSetupConversation() {
+    return state.projectSetup.messages.map((message) => ({
+        sender: message.sender,
+        text: message.text,
+    }));
+}
+
+async function requestProjectCopilotReply(userText = "") {
+    if (state.projectSetup.busy) return;
+
+    actions.beginProjectSetupInput(state, userText);
+    render();
+
+    const reply = await runAction(
+        api.projectCopilot.reply,
+        {
+            messages: getProjectSetupConversation(),
+        },
+        "Could not reach the project copilot.",
+    );
+
+    if (reply === null) {
+        actions.failProjectSetupReply(state, "Project copilot is unavailable right now.");
+        render();
+        return;
+    }
+
+    actions.receiveProjectSetupReply(state, reply);
+    render();
+}
+
+async function maybeBootstrapProjectSetup() {
+    if (
+        !convexClient ||
+        !state.projectSetup.open ||
+        state.currentView !== "project-setup" ||
+        state.projectSetup.initialized ||
+        state.projectSetup.busy
+    ) {
+        return;
+    }
+
+    await requestProjectCopilotReply();
+}
+
+async function sendProjectSetupMessage(textOverride?: string) {
+    const input = document.getElementById("projectSetupInput") as HTMLTextAreaElement | null;
+    if (!input) return;
+
+    const text = (textOverride ?? input.value).trim();
+    if (!text) return;
+
+    input.value = "";
+    input.style.height = "auto";
+    await requestProjectCopilotReply(text);
 }
 
 async function createTask(title: string) {
@@ -822,21 +886,35 @@ async function addModalSubtask(taskId) {
 }
 
 async function createProjectFromDraft() {
-    const draft = state.projectSetup.draft;
-    if (!draft) return;
+    const selectedMode = getProjectSetupSelectedMode(state.projectSetup);
 
     const createdProject = await runMutation(
-        api.projects.create,
+        api.projects.createFromCopilot,
         {
-            name: draft.name.trim(),
-            deadline: parseProjectDeadlineInput(draft.deadline) || draft.deadline,
-            summary: draft.summary.trim(),
-            nextStep: draft.nextStep.trim(),
-            starterTasks: draft.tasks.map((task, index) => ({
+            planType: selectedMode,
+            brief: {
+                name: state.projectSetup.brief.name.trim(),
+                deadline: state.projectSetup.brief.deadline || undefined,
+                goal: state.projectSetup.brief.goal.trim(),
+                currentProgress: state.projectSetup.brief.currentProgress.trim(),
+                successCriteria: state.projectSetup.brief.successCriteria.trim(),
+                constraints: state.projectSetup.brief.constraints.trim(),
+                blockersRisks: state.projectSetup.brief.blockersRisks.trim(),
+            },
+            routine:
+                selectedMode === "routine_system"
+                    ? {
+                          cadence: state.projectSetup.routine.cadence.trim(),
+                          checkpoints: state.projectSetup.routine.checkpoints.map((value) => value.trim()),
+                          rules: state.projectSetup.routine.rules.map((value) => value.trim()),
+                      }
+                    : null,
+            starterTasks: state.projectSetup.starterTasks.map((task) => ({
+                id: task.id,
                 title: task.title.trim(),
                 description: task.description?.trim() || "",
-                dueAt: index === 0 ? TODAY_ISO : undefined,
-                priority: index === 0 ? "high" : "medium",
+                dueAt: task.dueAt || undefined,
+                priority: task.priority || "medium",
             })),
         },
         "Could not create project.",
@@ -1058,7 +1136,7 @@ document.addEventListener("keydown", (event) => {
 
     if (target?.id === "projectSetupInput" && event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        sendProjectSetupMessage();
+        void sendProjectSetupMessage();
     }
 
     if (target?.id === "modalNewSubtaskInput" && event.key === "Enter") {
@@ -1099,29 +1177,74 @@ document.addEventListener("input", (event) => {
         return;
     }
 
-    if (target.id === "projectDraftName") {
-        actions.updateProjectDraftField(state, "name", target.value);
+    if (target.id === "projectBriefName") {
+        actions.updateProjectBriefField(state, "name", target.value);
         return;
     }
 
-    if (target.id === "projectDraftDeadline") {
-        actions.updateProjectDraftField(state, "deadline", target.value);
+    if (target.id === "projectBriefDeadline") {
+        actions.updateProjectBriefField(state, "deadline", target.value);
         return;
     }
 
-    if (target.id === "projectDraftSummary") {
-        actions.updateProjectDraftField(state, "summary", target.value);
+    if (target.id === "projectBriefGoal") {
+        actions.updateProjectBriefField(state, "goal", target.value);
         autoResize(target);
         return;
     }
 
-    if (target.id === "projectDraftNextStep") {
-        actions.updateProjectDraftField(state, "nextStep", target.value);
+    if (target.id === "projectBriefCurrentProgress") {
+        actions.updateProjectBriefField(state, "currentProgress", target.value);
+        autoResize(target);
         return;
     }
 
-    if (target.dataset.action === "edit-project-draft-task") {
-        actions.updateProjectDraftTask(state, target.dataset.taskId, target.value);
+    if (target.id === "projectBriefSuccessCriteria") {
+        actions.updateProjectBriefField(state, "successCriteria", target.value);
+        autoResize(target);
+        return;
+    }
+
+    if (target.id === "projectBriefConstraints") {
+        actions.updateProjectBriefField(state, "constraints", target.value);
+        autoResize(target);
+        return;
+    }
+
+    if (target.id === "projectBriefBlockersRisks") {
+        actions.updateProjectBriefField(state, "blockersRisks", target.value);
+        autoResize(target);
+        return;
+    }
+
+    if (target.id === "projectRoutineCadence") {
+        actions.updateProjectRoutineField(state, "cadence", target.value);
+        return;
+    }
+
+    if (target.dataset.action === "edit-project-task-title") {
+        actions.updateProjectSetupTaskFieldValue(state, target.dataset.taskId, "title", target.value);
+        return;
+    }
+
+    if (target.dataset.action === "edit-project-task-description") {
+        actions.updateProjectSetupTaskFieldValue(state, target.dataset.taskId, "description", target.value);
+        autoResize(target);
+        return;
+    }
+
+    if (target.dataset.action === "edit-project-task-due-at") {
+        actions.updateProjectSetupTaskFieldValue(state, target.dataset.taskId, "dueAt", target.value);
+        return;
+    }
+
+    if (target.dataset.action === "edit-project-routine-item") {
+        actions.updateProjectRoutineItem(
+            state,
+            target.dataset.listKey,
+            Number(target.dataset.index),
+            target.value,
+        );
     }
 });
 
@@ -1213,6 +1336,11 @@ document.addEventListener("change", (event) => {
             },
             "Could not update priority.",
         );
+        return;
+    }
+
+    if (target.dataset.action === "edit-project-task-priority") {
+        actions.updateProjectSetupTaskFieldValue(state, target.dataset.taskId, "priority", target.value);
     }
 });
 
@@ -1445,17 +1573,51 @@ document.addEventListener("click", (event) => {
     }
 
     if (action === "send-project-setup") {
-        sendProjectSetupMessage();
+        void sendProjectSetupMessage();
         return;
     }
 
     if (action === "project-setup-suggestion") {
-        sendProjectSetupMessage(suggestion);
+        void sendProjectSetupMessage(suggestion);
         return;
     }
 
     if (action === "confirm-project-draft") {
         void createProjectFromDraft();
+        return;
+    }
+
+    if (action === "select-project-setup-mode") {
+        actions.setProjectSetupMode(state, actionElement.dataset.mode);
+        render();
+        return;
+    }
+
+    if (action === "add-project-task") {
+        actions.addProjectSetupStarterTask(state);
+        render();
+        return;
+    }
+
+    if (action === "remove-project-task") {
+        actions.removeProjectSetupStarterTask(state, actionElement.dataset.taskId);
+        render();
+        return;
+    }
+
+    if (action === "add-project-routine-item") {
+        actions.addProjectRoutineItem(state, actionElement.dataset.listKey);
+        render();
+        return;
+    }
+
+    if (action === "remove-project-routine-item") {
+        actions.removeProjectRoutineItem(
+            state,
+            actionElement.dataset.listKey,
+            Number(actionElement.dataset.index),
+        );
+        render();
         return;
     }
 

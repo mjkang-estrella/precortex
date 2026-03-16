@@ -9603,234 +9603,212 @@ var formatters = {
 };
 
 // src/state/project-bay.ts
-var QUESTION_COPY = {
-  outcome: "what needs to be true for this project to feel successful?",
-  motivation: "why does this project matter right now?",
-  success: "how will you judge whether this project worked?",
-  constraints: "what constraints do we need to respect?",
-  risks: "what could derail this if we do the obvious thing too fast?",
-  milestone: "what feels like the first meaningful milestone?",
-  unknowns: "what still feels fuzzy or undecided?"
-};
-var FOLLOW_UP_ORDER = ["outcome", "motivation", "success", "constraints", "risks", "milestone", "unknowns"];
-function createMessage(sender, text) {
-  return { sender, text, rich: false, tasks: [] };
+function cleanText(value) {
+  return typeof value === "string" ? value : "";
 }
-function cloneMessage(message) {
+function cleanList(values = []) {
+  return values.map((value) => cleanText(value).trim()).filter(Boolean);
+}
+function createEmptyProjectBrief() {
   return {
-    ...message,
-    tasks: message.tasks.map((task) => ({ ...task }))
+    name: "",
+    deadline: "",
+    goal: "",
+    currentProgress: "",
+    successCriteria: "",
+    constraints: "",
+    blockersRisks: ""
   };
 }
-function countFilledAnswers(answers) {
-  return FOLLOW_UP_ORDER.filter((key) => answers[key]).length;
+function createEmptyRoutine() {
+  return {
+    cadence: "",
+    checkpoints: [],
+    rules: []
+  };
 }
-function isPastDate(value) {
-  return parseLocalISODate(value).getTime() < TODAY.getTime();
+function createEmptyStarterTask(index = 0) {
+  return {
+    id: `starter-task-${Date.now()}-${index}`,
+    title: "",
+    description: "",
+    dueAt: "",
+    priority: index === 0 ? "high" : "medium"
+  };
+}
+function createMessage(sender, text) {
+  return {
+    sender,
+    text,
+    rich: false,
+    tasks: []
+  };
 }
 function createProjectSetupState(open = false, previousView = "today") {
   return {
     open,
     previousView,
+    initialized: false,
+    busy: false,
+    error: null,
     phase: "chat",
-    promptKey: "name",
-    messages: open ? [createMessage("assistant", "let's turn this into a real plan. what's the project name?")] : [],
-    answers: {
-      name: "",
-      deadline: "",
-      outcome: "",
-      motivation: "",
-      success: "",
-      constraints: "",
-      risks: "",
-      milestone: "",
-      unknowns: ""
-    },
-    draft: null
+    status: "clarifying",
+    recommendedMode: "task_plan",
+    modeOverride: null,
+    messages: [],
+    brief: createEmptyProjectBrief(),
+    starterTasks: [],
+    routine: createEmptyRoutine(),
+    missingInformation: []
   };
 }
 function cloneProjectSetupState(projectSetup) {
   return {
     ...projectSetup,
-    messages: projectSetup.messages.map(cloneMessage),
-    answers: { ...projectSetup.answers },
-    draft: projectSetup.draft ? cloneProjectDraft(projectSetup.draft) : null
+    messages: projectSetup.messages.map((message) => ({ ...message })),
+    brief: { ...projectSetup.brief },
+    starterTasks: projectSetup.starterTasks.map((task) => ({ ...task })),
+    routine: {
+      cadence: projectSetup.routine?.cadence || "",
+      checkpoints: [...projectSetup.routine?.checkpoints || []],
+      rules: [...projectSetup.routine?.rules || []]
+    },
+    missingInformation: [...projectSetup.missingInformation]
   };
 }
-function cloneProjectDraft(draft) {
+function normalizeBrief(brief) {
   return {
-    ...draft,
-    tasks: draft.tasks.map((task) => ({ ...task }))
+    name: cleanText(brief?.name),
+    deadline: cleanText(brief?.deadline),
+    goal: cleanText(brief?.goal),
+    currentProgress: cleanText(brief?.currentProgress),
+    successCriteria: cleanText(brief?.successCriteria),
+    constraints: cleanText(brief?.constraints),
+    blockersRisks: cleanText(brief?.blockersRisks)
   };
 }
-function parseProjectDeadlineInput(value) {
-  const text = value.trim().toLowerCase();
-  if (!text) return null;
-  if (text === "today") return TODAY_ISO;
-  if (text === "tomorrow") return toLocalISODate(addDays(TODAY, 1));
-  if (text === "next week") return toLocalISODate(addDays(TODAY, 7));
-  const relativeMatch = text.match(/^in\s+(\d+)\s+days?$/);
-  if (relativeMatch) {
-    return toLocalISODate(addDays(TODAY, Number(relativeMatch[1])));
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-    return text;
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return toLocalISODate(parsed);
+function normalizeStarterTasks(tasks) {
+  return (Array.isArray(tasks) ? tasks : []).map((task, index) => ({
+    id: cleanText(task?.id) || `starter-task-${index + 1}`,
+    title: cleanText(task?.title),
+    description: cleanText(task?.description),
+    dueAt: cleanText(task?.dueAt),
+    priority: task?.priority === "none" || task?.priority === "low" || task?.priority === "medium" || task?.priority === "high" ? task.priority : index === 0 ? "high" : "medium"
+  })).filter((task) => task.title.trim());
 }
-function getNextFollowUpKey(answers) {
-  return FOLLOW_UP_ORDER.find((key) => !answers[key]) || null;
-}
-function hasDraftInputs(answers) {
-  return Boolean(
-    answers.name && answers.deadline && answers.outcome && (answers.success || answers.constraints || answers.risks)
-  );
-}
-function ensureSentence(value, fallback) {
-  const text = value?.trim();
-  if (!text) return fallback;
-  return text.endsWith(".") ? text : `${text}.`;
-}
-function normalizeOutcome(value) {
-  const text = value.trim().replace(/\.$/, "");
-  const stripped = text.replace(/^we need\s+/i, "").replace(/^need to\s+/i, "").replace(/^to\s+/i, "");
-  return stripped.charAt(0).toLowerCase() + stripped.slice(1);
-}
-function buildNextStep(answers) {
-  if (answers.milestone) {
-    return `Turn "${answers.milestone}" into a concrete execution checklist`;
-  }
-  if (answers.success) {
-    return `Write the project brief and success criteria for ${answers.name}`;
-  }
-  return `Draft the first-pass plan for ${answers.name}`;
-}
-function generateProjectDraft(answers) {
-  const deadlineDate = parseLocalISODate(answers.deadline);
-  const deadlineLabel = formatters.modalDate.format(deadlineDate).toLowerCase();
-  const nextStep = buildNextStep(answers);
-  const summary = [
-    `The project aims to ${normalizeOutcome(answers.outcome)}.`,
-    ensureSentence(
-      answers.motivation,
-      "It needs a sharper plan before execution starts."
-    ),
-    ensureSentence(
-      answers.success ? `Success looks like ${answers.success}` : "Success needs to be defined early so execution does not drift",
-      "Success needs to be defined early so execution does not drift."
-    ),
-    ensureSentence(
-      answers.constraints ? `Constraints to respect: ${answers.constraints}` : answers.risks ? `Main risk to watch: ${answers.risks}` : "The first pass should surface the main blockers early",
-      "The first pass should surface the main blockers early."
-    ),
-    `Target deadline: ${deadlineLabel}.`
-  ].join(" ");
-  const supportingTasks = [
-    {
-      id: "draft-task-1",
-      title: nextStep,
-      description: "Make the first concrete move so the project stops living as an idea.",
-      dueAt: TODAY_ISO
-    },
-    {
-      id: "draft-task-2",
-      title: `Define the success criteria for ${answers.name}`,
-      description: answers.success ? answers.success : "Translate the desired outcome into a small set of checkable outcomes.",
-      dueAt: null
-    },
-    {
-      id: "draft-task-3",
-      title: `Document the scope, constraints, and risks`,
-      description: answers.constraints || answers.risks || "Capture the limits and blockers before execution expands.",
-      dueAt: null
-    },
-    {
-      id: "draft-task-4",
-      title: `Break the first milestone into smaller tasks`,
-      description: answers.milestone || "Pick the first milestone and split it into concrete chunks.",
-      dueAt: null
-    },
-    {
-      id: "draft-task-5",
-      title: `Schedule a project review before the deadline`,
-      description: `Create a review point before ${deadlineLabel} so the project can still change course in time.`,
-      dueAt: null
-    }
-  ];
-  if (answers.unknowns) {
-    supportingTasks.push({
-      id: "draft-task-6",
-      title: "Resolve the key open questions",
-      description: answers.unknowns,
-      dueAt: null
-    });
-  }
+function normalizeRoutine(routine) {
   return {
-    name: answers.name,
-    deadline: answers.deadline,
-    summary,
-    nextStep,
-    tasks: supportingTasks.slice(0, 6)
+    cadence: cleanText(routine?.cadence),
+    checkpoints: cleanList(routine?.checkpoints),
+    rules: cleanList(routine?.rules)
   };
 }
-function submitProjectSetupMessage(projectSetup, rawText) {
-  const text = rawText.trim();
-  if (!text) return projectSetup;
+function getProjectSetupSelectedMode(projectSetup) {
+  return projectSetup.modeOverride || projectSetup.recommendedMode || "task_plan";
+}
+function beginProjectSetupRequest(projectSetup, userText = "") {
   const nextState = cloneProjectSetupState(projectSetup);
-  nextState.messages.push(createMessage("user", text));
-  if (nextState.promptKey === "name") {
-    if (text.length < 3) {
-      nextState.messages.push(
-        createMessage("assistant", "give me a slightly clearer project name so i can anchor the plan.")
-      );
-      return nextState;
-    }
-    nextState.answers.name = text;
-    nextState.promptKey = "deadline";
-    nextState.messages.push(
-      createMessage(
-        "assistant",
-        `good. when is ${text.toLowerCase()} due? you can say something like "2026-04-30", "tomorrow", or "in 10 days".`
-      )
-    );
-    return nextState;
+  nextState.initialized = true;
+  nextState.busy = true;
+  nextState.error = null;
+  const text = userText.trim();
+  if (text) {
+    nextState.messages.push(createMessage("user", text));
   }
-  if (nextState.promptKey === "deadline") {
-    const deadline = parseProjectDeadlineInput(text);
-    if (!deadline || isPastDate(deadline)) {
-      nextState.messages.push(
-        createMessage(
-          "assistant",
-          "i need a real future deadline to shape the plan. try a date like 2026-04-30 or a phrase like tomorrow."
-        )
-      );
-      return nextState;
-    }
-    nextState.answers.deadline = deadline;
-    nextState.promptKey = "outcome";
-    nextState.messages.push(
-      createMessage("assistant", QUESTION_COPY.outcome)
-    );
-    return nextState;
+  return nextState;
+}
+function applyProjectSetupReply(projectSetup, reply) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  nextState.initialized = true;
+  nextState.busy = false;
+  nextState.error = null;
+  if (reply.assistantMessage) {
+    nextState.messages.push(createMessage("assistant", reply.assistantMessage));
   }
-  nextState.answers[nextState.promptKey] = text;
-  if (hasDraftInputs(nextState.answers) && countFilledAnswers(nextState.answers) >= 3) {
-    nextState.phase = "review";
-    nextState.promptKey = null;
-    nextState.draft = generateProjectDraft(nextState.answers);
-    nextState.messages.push(
-      createMessage(
-        "assistant",
-        "i have enough to draft the plan. review it, edit anything that feels off, then create the project."
-      )
-    );
-    return nextState;
-  }
-  const nextKey = getNextFollowUpKey(nextState.answers);
-  nextState.promptKey = nextKey;
-  nextState.messages.push(createMessage("assistant", QUESTION_COPY[nextKey]));
+  nextState.status = reply.status === "ready" ? "ready" : "clarifying";
+  nextState.phase = nextState.status === "ready" ? "review" : "chat";
+  nextState.recommendedMode = reply.recommendedMode === "routine_system" ? "routine_system" : "task_plan";
+  nextState.brief = normalizeBrief(reply.brief);
+  nextState.starterTasks = normalizeStarterTasks(reply.starterTasks);
+  nextState.routine = normalizeRoutine(reply.routine);
+  nextState.missingInformation = cleanList(reply.missingInformation);
+  return nextState;
+}
+function failProjectSetupRequest(projectSetup, message) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  nextState.initialized = true;
+  nextState.busy = false;
+  nextState.error = message;
+  return nextState;
+}
+function updateProjectSetupBriefField(projectSetup, field, value) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  nextState.brief = {
+    ...nextState.brief,
+    [field]: value
+  };
+  return nextState;
+}
+function setProjectSetupModeOverride(projectSetup, mode) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  nextState.modeOverride = mode === nextState.recommendedMode ? null : mode;
+  return nextState;
+}
+function updateProjectSetupTaskField(projectSetup, taskId, field, value) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  nextState.starterTasks = nextState.starterTasks.map(
+    (task) => task.id === taskId ? {
+      ...task,
+      [field]: value
+    } : task
+  );
+  return nextState;
+}
+function addProjectSetupTask(projectSetup) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  nextState.starterTasks = [
+    ...nextState.starterTasks,
+    createEmptyStarterTask(nextState.starterTasks.length)
+  ];
+  return nextState;
+}
+function removeProjectSetupTask(projectSetup, taskId) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  nextState.starterTasks = nextState.starterTasks.filter((task) => task.id !== taskId);
+  return nextState;
+}
+function updateProjectSetupRoutineField(projectSetup, field, value) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  nextState.routine = {
+    ...nextState.routine,
+    [field]: value
+  };
+  return nextState;
+}
+function updateProjectSetupRoutineItem(projectSetup, listKey, index, value) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  const items = [...nextState.routine[listKey]];
+  items[index] = value;
+  nextState.routine = {
+    ...nextState.routine,
+    [listKey]: items
+  };
+  return nextState;
+}
+function addProjectSetupRoutineItem(projectSetup, listKey) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  nextState.routine = {
+    ...nextState.routine,
+    [listKey]: [...nextState.routine[listKey], ""]
+  };
+  return nextState;
+}
+function removeProjectSetupRoutineItem(projectSetup, listKey, index) {
+  const nextState = cloneProjectSetupState(projectSetup);
+  nextState.routine = {
+    ...nextState.routine,
+    [listKey]: nextState.routine[listKey].filter((_2, itemIndex) => itemIndex !== index)
+  };
   return nextState;
 }
 
@@ -9936,37 +9914,41 @@ function restartProjectSetup(state2) {
   state2.projectSetup = createProjectSetupState(true, previousView);
   state2.currentView = "project-setup";
 }
-function submitProjectSetupInput(state2, text) {
-  state2.projectSetup = submitProjectSetupMessage(state2.projectSetup, text);
+function beginProjectSetupInput(state2, text = "") {
+  state2.projectSetup = beginProjectSetupRequest(state2.projectSetup, text);
 }
-function updateProjectDraftField(state2, field, value) {
-  if (!state2.projectSetup.draft) return;
-  const draft = cloneProjectDraft(state2.projectSetup.draft);
-  draft[field] = value;
-  if (field === "nextStep" && draft.tasks.length) {
-    draft.tasks[0] = { ...draft.tasks[0], title: value };
-  }
-  if (field === "name") {
-    draft.tasks = draft.tasks.map((task, index) => {
-      if (index === 1) {
-        return {
-          ...task,
-          title: `Define the success criteria for ${value}`
-        };
-      }
-      return task;
-    });
-  }
-  state2.projectSetup.draft = draft;
+function receiveProjectSetupReply(state2, reply) {
+  state2.projectSetup = applyProjectSetupReply(state2.projectSetup, reply);
 }
-function updateProjectDraftTask(state2, taskId, value) {
-  if (!state2.projectSetup.draft) return;
-  const draft = cloneProjectDraft(state2.projectSetup.draft);
-  draft.tasks = draft.tasks.map((task) => task.id === taskId ? { ...task, title: value } : task);
-  if (draft.tasks[0]?.id === taskId) {
-    draft.nextStep = value;
-  }
-  state2.projectSetup.draft = draft;
+function failProjectSetupReply(state2, message) {
+  state2.projectSetup = failProjectSetupRequest(state2.projectSetup, message);
+}
+function updateProjectBriefField(state2, field, value) {
+  state2.projectSetup = updateProjectSetupBriefField(state2.projectSetup, field, value);
+}
+function setProjectSetupMode(state2, mode) {
+  state2.projectSetup = setProjectSetupModeOverride(state2.projectSetup, mode);
+}
+function updateProjectSetupTaskFieldValue(state2, taskId, field, value) {
+  state2.projectSetup = updateProjectSetupTaskField(state2.projectSetup, taskId, field, value);
+}
+function addProjectSetupStarterTask(state2) {
+  state2.projectSetup = addProjectSetupTask(state2.projectSetup);
+}
+function removeProjectSetupStarterTask(state2, taskId) {
+  state2.projectSetup = removeProjectSetupTask(state2.projectSetup, taskId);
+}
+function updateProjectRoutineField(state2, field, value) {
+  state2.projectSetup = updateProjectSetupRoutineField(state2.projectSetup, field, value);
+}
+function updateProjectRoutineItem(state2, listKey, index, value) {
+  state2.projectSetup = updateProjectSetupRoutineItem(state2.projectSetup, listKey, index, value);
+}
+function addProjectRoutineItem(state2, listKey) {
+  state2.projectSetup = addProjectSetupRoutineItem(state2.projectSetup, listKey);
+}
+function removeProjectRoutineItem(state2, listKey, index) {
+  state2.projectSetup = removeProjectSetupRoutineItem(state2.projectSetup, listKey, index);
 }
 
 // src/utils/text.ts
@@ -10820,23 +10802,24 @@ function renderNavigation({
 
 // src/views/project-setup-view.ts
 var quickStarters = [
-  "website redesign",
-  "marketing campaign",
-  "event planning",
-  "product launch"
+  "launch a small b2b outbound system",
+  "ship the website redesign before q2",
+  "set up a weekly content engine",
+  "plan the fall community fundraiser"
 ];
-function formatDraftDeadline(deadline) {
-  if (!deadline) return "add a deadline to shape the starter plan";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) return "use a date like 2026-04-30";
-  return formatters.modalDate.format(parseLocalISODate(deadline)).toLowerCase();
-}
+var stepCopy = [
+  "align on the goal",
+  "understand progress and blockers",
+  "choose tasks or a routine",
+  "review the actionable output"
+];
 function renderSetupMessages(messages) {
   return messages.map((message, index) => {
     const isUser = message.sender === "user";
     return `
-                <div class="flex ${isUser ? "justify-end" : "justify-start"} animate-reveal" style="animation-delay: ${Math.min(index * 60, 320)}ms">
-                    <div class="max-w-[92%] sm:max-w-[80%]">
-                        <div class="mb-1.5 flex items-center gap-2 px-1 text-[11px] font-semibold lowercase tracking-[0.16em] ${isUser ? "justify-end text-stone-400" : "text-stone-500"}">
+                <div class="flex ${isUser ? "justify-end" : "justify-start"} animate-reveal" style="animation-delay: ${Math.min(index * 50, 240)}ms">
+                    <div class="max-w-[92%] sm:max-w-[82%]">
+                        <div class="mb-1.5 flex items-center gap-2 px-1 text-[11px] font-semibold tracking-[0.16em] lowercase ${isUser ? "justify-end text-stone-400" : "text-stone-500"}">
                             ${isUser ? "you" : "project copilot"}
                         </div>
                         <div class="${isUser ? "rounded-[28px] rounded-tr-[10px] bg-stone-900 text-white shadow-soft" : "rounded-[28px] rounded-tl-[10px] border border-stone-200/80 bg-white text-stone-800 shadow-sm"} px-5 py-4 text-[15px] leading-relaxed">
@@ -10847,149 +10830,409 @@ function renderSetupMessages(messages) {
             `;
   }).join("");
 }
-function renderHowItWorks(projectSetup) {
+function renderTypingState() {
+  return `
+        <div class="flex justify-start animate-reveal">
+            <div class="max-w-[82%]">
+                <div class="mb-1.5 flex items-center gap-2 px-1 text-[11px] font-semibold tracking-[0.16em] lowercase text-stone-500">project copilot</div>
+                <div class="rounded-[28px] rounded-tl-[10px] border border-stone-200/80 bg-white px-5 py-4 shadow-sm">
+                    <div class="flex items-center gap-1.5">
+                        <span class="typing-dot h-1.5 w-1.5 rounded-full bg-stone-400"></span>
+                        <span class="typing-dot h-1.5 w-1.5 rounded-full bg-stone-400"></span>
+                        <span class="typing-dot h-1.5 w-1.5 rounded-full bg-stone-400"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+function renderQuickStarters(projectSetup) {
   if (projectSetup.messages.length > 1) return "";
   return `
         <section class="animate-reveal rounded-[32px] border border-stone-200/80 bg-white/90 p-5 shadow-soft sm:p-6">
-            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-end">
+            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-end">
                 <div>
-                    <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">how it works</div>
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">how this works</div>
                     <p class="mt-3 text-[15px] leading-relaxed text-stone-600 lowercase">
-                        answer a few prompts in plain language. the system turns that into a clean project draft with editable starter tasks before anything is saved.
+                        the copilot should leave you with something executable, not vague ambition. it will either shape a concrete task plan or recommend a working routine with startup tasks.
                     </p>
                 </div>
                 <div class="rounded-[24px] bg-stone-50 p-4">
-                    <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">status</div>
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">current state</div>
                     <div class="mt-2 text-[14px] font-medium lowercase text-stone-900">
-                        ${projectSetup.phase === "review" ? "ready for review" : "collecting project context"}
+                        ${projectSetup.busy ? "starting the discussion" : "ready to clarify the project"}
                     </div>
                 </div>
             </div>
-            ${projectSetup.phase === "chat" && projectSetup.messages.length <= 1 ? `
-                <div class="mt-5 pt-5 border-t border-stone-100">
-                    <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">quick starters</div>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        ${quickStarters.map(
+            <div class="mt-5 border-t border-stone-100 pt-5">
+                <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">quick starters</div>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    ${quickStarters.map(
     (starter) => `
-                                    <button
-                                        data-action="project-setup-suggestion"
-                                        data-suggestion="${escapeHtml(starter)}"
-                                        class="rounded-full border border-stone-200 bg-white px-4 py-2 text-[13px] font-medium lowercase text-stone-600 transition-all hover:border-stone-400 hover:text-stone-900 hover:shadow-sm"
-                                        type="button"
-                                    >
-                                        ${escapeHtml(starter)}
-                                    </button>
-                                `
+                                <button
+                                    data-action="project-setup-suggestion"
+                                    data-suggestion="${escapeHtml(starter)}"
+                                    class="rounded-full border border-stone-200 bg-white px-4 py-2 text-[13px] font-medium lowercase text-stone-600 transition-all hover:border-stone-400 hover:text-stone-900 hover:shadow-sm ${projectSetup.busy ? "pointer-events-none opacity-60" : ""}"
+                                    type="button"
+                                >
+                                    ${escapeHtml(starter)}
+                                </button>
+                            `
   ).join("")}
-                    </div>
                 </div>
-            ` : ""}
+            </div>
         </section>
     `;
 }
-function renderTaskInputs(tasks) {
-  return tasks.map(
-    (task, index) => `
-                <label class="flex items-start gap-3 rounded-[22px] border border-stone-200 bg-white px-4 py-3 shadow-sm">
-                    <span class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-[7px] border-2 border-stone-900 bg-stone-900 text-white">
-                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    </span>
-                    <span class="min-w-0 flex-1">
-                        <span class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">
-                            ${index === 0 ? "next move" : `starter task ${index + 1}`}
-                        </span>
-                        <input
-                            data-action="edit-project-draft-task"
-                            data-task-id="${task.id}"
-                            class="w-full bg-transparent text-[14px] font-medium text-stone-900 outline-none"
-                            value="${escapeHtml(task.title)}"
-                        >
-                    </span>
-                </label>
-            `
-  ).join("");
-}
-function renderReviewCard(draft) {
-  const selectedCount = draft.tasks.filter((task) => task.title.trim()).length;
+function renderTaskEditors(tasks) {
+  const rows = tasks.length ? tasks : [];
   return `
-        <section class="animate-reveal mt-8 rounded-[32px] border border-stone-200/80 bg-white p-5 shadow-float sm:p-7" style="animation-delay: 180ms">
-            <div class="flex flex-col gap-4 border-b border-stone-100 pb-6 lg:flex-row lg:items-start lg:justify-between">
+        <div class="flex flex-col gap-3">
+            ${rows.map(
+    (task, index) => `
+                        <div class="rounded-[24px] border border-stone-200 bg-white p-4 shadow-sm">
+                            <div class="mb-3 flex items-center justify-between gap-3">
+                                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">
+                                    ${index === 0 ? "first move" : `starter task ${index + 1}`}
+                                </div>
+                                <button
+                                    data-action="remove-project-task"
+                                    data-task-id="${task.id}"
+                                    class="rounded-full border border-stone-200 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500 transition-colors hover:border-stone-400 hover:text-stone-900"
+                                    type="button"
+                                >
+                                    remove
+                                </button>
+                            </div>
+                            <div class="flex flex-col gap-3">
+                                <input
+                                    data-action="edit-project-task-title"
+                                    data-task-id="${task.id}"
+                                    class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] font-medium text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white"
+                                    value="${escapeHtml(task.title)}"
+                                    placeholder="task title"
+                                >
+                                <textarea
+                                    data-action="edit-project-task-description"
+                                    data-task-id="${task.id}"
+                                    class="min-h-[88px] rounded-[22px] border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white resize-none"
+                                    placeholder="what does done look like?"
+                                >${escapeHtml(task.description || "")}</textarea>
+                                <div class="grid gap-3 md:grid-cols-2">
+                                    <label class="flex flex-col gap-2">
+                                        <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">due date</span>
+                                        <input
+                                            type="date"
+                                            data-action="edit-project-task-due-at"
+                                            data-task-id="${task.id}"
+                                            class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white"
+                                            value="${escapeHtml(task.dueAt || "")}"
+                                        >
+                                    </label>
+                                    <label class="flex flex-col gap-2">
+                                        <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">priority</span>
+                                        <select
+                                            data-action="edit-project-task-priority"
+                                            data-task-id="${task.id}"
+                                            class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white"
+                                        >
+                                            ${["none", "low", "medium", "high"].map(
+      (priority) => `
+                                                        <option value="${priority}" ${task.priority === priority ? "selected" : ""}>
+                                                            ${priority}
+                                                        </option>
+                                                    `
+    ).join("")}
+                                        </select>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    `
+  ).join("")}
+            <button
+                data-action="add-project-task"
+                class="rounded-[20px] border border-dashed border-stone-300 bg-stone-50 px-4 py-3 text-[13px] font-medium lowercase text-stone-600 transition-colors hover:border-stone-400 hover:text-stone-900"
+                type="button"
+            >
+                add starter task
+            </button>
+        </div>
+    `;
+}
+function renderRoutineItems(items, listKey, label, actionLabel) {
+  return `
+        <div class="flex flex-col gap-3">
+            ${items.map(
+    (item, index) => `
+                        <div class="flex items-start gap-3">
+                            <input
+                                data-action="edit-project-routine-item"
+                                data-list-key="${listKey}"
+                                data-index="${index}"
+                                class="flex-1 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400"
+                                value="${escapeHtml(item)}"
+                                placeholder="${escapeHtml(label)}"
+                            >
+                            <button
+                                data-action="remove-project-routine-item"
+                                data-list-key="${listKey}"
+                                data-index="${index}"
+                                class="rounded-full border border-stone-200 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500 transition-colors hover:border-stone-400 hover:text-stone-900"
+                                type="button"
+                            >
+                                remove
+                            </button>
+                        </div>
+                    `
+  ).join("")}
+            <button
+                data-action="add-project-routine-item"
+                data-list-key="${listKey}"
+                class="rounded-[18px] border border-dashed border-stone-300 bg-stone-50 px-4 py-3 text-[13px] font-medium lowercase text-stone-600 transition-colors hover:border-stone-400 hover:text-stone-900"
+                type="button"
+            >
+                ${escapeHtml(actionLabel)}
+            </button>
+        </div>
+    `;
+}
+function renderRoutineEditor(projectSetup) {
+  const routine = projectSetup.routine;
+  return `
+        <div class="rounded-[28px] border border-stone-200 bg-stone-50/80 p-5">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">routine or operating system</div>
+            <div class="mt-4 flex flex-col gap-5">
+                <label class="flex flex-col gap-2">
+                    <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">cadence</span>
+                    <input
+                        id="projectRoutineCadence"
+                        class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400"
+                        value="${escapeHtml(routine.cadence)}"
+                        placeholder="for example: monday planning, daily 30 minute execution block, friday review"
+                    >
+                </label>
                 <div>
-                    <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">starter plan</div>
-                    <h2 class="mt-2 font-display text-3xl lowercase tracking-tight text-stone-900">review before creating</h2>
-                    <p class="mt-2 max-w-2xl text-[14px] leading-relaxed text-stone-500 lowercase">
-                        this is the wireframe for the new project. edit the fields directly, then create it when the structure feels right.
-                    </p>
+                    <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">checkpoints</div>
+                    ${renderRoutineItems(
+    routine.checkpoints,
+    "checkpoints",
+    "checkpoint",
+    "add checkpoint"
+  )}
                 </div>
-                <div class="inline-flex items-center gap-2 self-start rounded-full border border-stone-200 bg-stone-50 px-3 py-2 text-[12px] font-medium lowercase text-stone-600">
-                    <span class="h-2 w-2 rounded-full bg-stone-900"></span>
-                    ${selectedCount} starter tasks ready
+                <div>
+                    <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">rules</div>
+                    ${renderRoutineItems(routine.rules, "rules", "rule", "add rule")}
+                </div>
+            </div>
+        </div>
+    `;
+}
+function getSelectedMode(projectSetup) {
+  return projectSetup.modeOverride || projectSetup.recommendedMode;
+}
+function renderReview(projectSetup) {
+  const brief = projectSetup.brief;
+  const selectedMode = getSelectedMode(projectSetup);
+  return `
+        <section class="animate-reveal rounded-[32px] border border-stone-200/80 bg-white p-5 shadow-float sm:p-7">
+            <div class="flex flex-col gap-4 border-b border-stone-100 pb-6">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">actionable review</div>
+                        <h2 class="mt-2 font-display text-3xl lowercase tracking-tight text-stone-900">the copilot thinks this is ready</h2>
+                        <p class="mt-2 max-w-2xl text-[14px] leading-relaxed text-stone-500 lowercase">
+                            review the structured brief, then keep the recommended mode or switch it before creating the project.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="rounded-full border border-stone-200 bg-stone-50 px-3 py-2 text-[12px] font-medium lowercase text-stone-600">
+                            recommended: ${escapeHtml(projectSetup.recommendedMode.replace("_", " "))}
+                        </span>
+                        ${projectSetup.missingInformation.length ? `<span class="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium lowercase text-amber-700">
+                                    still watch: ${escapeHtml(projectSetup.missingInformation.join(", "))}
+                               </span>` : ""}
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    ${["task_plan", "routine_system"].map(
+    (mode) => `
+                                <button
+                                    data-action="select-project-setup-mode"
+                                    data-mode="${mode}"
+                                    class="rounded-full px-4 py-2 text-[13px] font-medium lowercase transition-all ${selectedMode === mode ? "bg-stone-900 text-white shadow-sm" : "border border-stone-200 bg-white text-stone-600 hover:border-stone-400 hover:text-stone-900"}"
+                                    type="button"
+                                >
+                                    ${mode === "task_plan" ? "task plan" : "routine / system"}
+                                </button>
+                            `
+  ).join("")}
                 </div>
             </div>
 
-            <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+            <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
                 <div class="flex flex-col gap-4">
                     <div class="grid gap-4 md:grid-cols-2">
                         <label class="flex flex-col gap-2">
                             <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">project name</span>
-                            <input id="projectDraftName" class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white" value="${escapeHtml(draft.name)}">
+                            <input id="projectBriefName" class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white" value="${escapeHtml(brief.name)}">
                         </label>
                         <label class="flex flex-col gap-2">
                             <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">deadline</span>
-                            <input id="projectDraftDeadline" class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white" value="${escapeHtml(draft.deadline)}">
-                            <span class="text-[12px] text-stone-500 lowercase">${escapeHtml(formatDraftDeadline(draft.deadline))}</span>
+                            <input id="projectBriefDeadline" type="date" class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white" value="${escapeHtml(brief.deadline)}">
                         </label>
                     </div>
-
                     <label class="flex flex-col gap-2">
-                        <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">summary</span>
-                        <textarea id="projectDraftSummary" class="min-h-[132px] rounded-[28px] border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white resize-none">${escapeHtml(draft.summary)}</textarea>
+                        <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">goal</span>
+                        <textarea id="projectBriefGoal" class="min-h-[110px] rounded-[26px] border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white resize-none">${escapeHtml(brief.goal)}</textarea>
                     </label>
-
                     <label class="flex flex-col gap-2">
-                        <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">next step</span>
-                        <input id="projectDraftNextStep" class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white" value="${escapeHtml(draft.nextStep)}">
+                        <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">current progress</span>
+                        <textarea id="projectBriefCurrentProgress" class="min-h-[96px] rounded-[24px] border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white resize-none">${escapeHtml(brief.currentProgress)}</textarea>
                     </label>
+                    <label class="flex flex-col gap-2">
+                        <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">success criteria</span>
+                        <textarea id="projectBriefSuccessCriteria" class="min-h-[96px] rounded-[24px] border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white resize-none">${escapeHtml(brief.successCriteria)}</textarea>
+                    </label>
+                    <div class="grid gap-4 lg:grid-cols-2">
+                        <label class="flex flex-col gap-2">
+                            <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">constraints</span>
+                            <textarea id="projectBriefConstraints" class="min-h-[110px] rounded-[24px] border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white resize-none">${escapeHtml(brief.constraints)}</textarea>
+                        </label>
+                        <label class="flex flex-col gap-2">
+                            <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">blockers and risks</span>
+                            <textarea id="projectBriefBlockersRisks" class="min-h-[110px] rounded-[24px] border border-stone-200 bg-stone-50 px-4 py-3 text-[14px] leading-relaxed text-stone-900 outline-none transition-colors focus:border-stone-400 focus:bg-white resize-none">${escapeHtml(brief.blockersRisks)}</textarea>
+                        </label>
+                    </div>
                 </div>
 
-                <div class="rounded-[28px] border border-stone-200 bg-stone-50/80 p-5">
-                    <div class="flex items-center justify-between gap-3">
-                        <div>
-                            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">starter tasks</div>
-                            <div class="mt-1 text-[13px] text-stone-500 lowercase">adjust the first pass before it becomes real tasks</div>
+                <div class="flex flex-col gap-5">
+                    <div class="rounded-[28px] border border-stone-200 bg-stone-50/80 p-5">
+                        <div class="mb-4 flex items-center justify-between gap-3">
+                            <div>
+                                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">starter tasks</div>
+                                <div class="mt-1 text-[13px] text-stone-500 lowercase">these should be immediately executable</div>
+                            </div>
                         </div>
+                        ${renderTaskEditors(projectSetup.starterTasks)}
                     </div>
-                    <div class="mt-4 flex flex-col gap-3">
-                        ${renderTaskInputs(draft.tasks)}
-                    </div>
+                    ${selectedMode === "routine_system" ? renderRoutineEditor(projectSetup) : ""}
                 </div>
             </div>
         </section>
     `;
 }
-function renderComposer() {
+function renderSidebar(projectSetup) {
+  const selectedMode = getSelectedMode(projectSetup);
+  const stepCount = projectSetup.phase === "review" ? stepCopy.length : Math.min(projectSetup.messages.length + 1, stepCopy.length);
+  return `
+        <aside class="hidden xl:flex xl:min-h-0 xl:flex-col xl:border-l xl:border-stone-100 xl:bg-stone-50/65">
+            <div class="border-b border-stone-100 px-6 py-6">
+                <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">copilot state</div>
+                <h2 class="mt-3 font-display text-3xl lowercase tracking-tight text-stone-900">project signal</h2>
+                <p class="mt-2 text-[14px] leading-relaxed text-stone-500 lowercase">
+                    this panel tracks whether the copilot is still clarifying or has enough signal to turn the project into execution.
+                </p>
+            </div>
+            <div class="flex-1 overflow-y-auto px-6 py-6">
+                <div class="rounded-[28px] border border-stone-200 bg-white p-5 shadow-sm">
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">progress</div>
+                    <div class="mt-4 flex flex-col gap-3">
+                        ${stepCopy.map(
+    (step, index) => `
+                                    <div class="flex items-center gap-3 text-[13px] lowercase ${index < stepCount ? "text-stone-900" : "text-stone-400"}">
+                                        <span class="flex h-7 w-7 items-center justify-center rounded-full border ${index < stepCount ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 bg-white text-stone-400"}">
+                                            ${index < stepCount ? "\u2713" : index + 1}
+                                        </span>
+                                        <span>${escapeHtml(step)}</span>
+                                    </div>
+                                `
+  ).join("")}
+                    </div>
+                </div>
+
+                <div class="mt-5 rounded-[28px] border border-stone-200 bg-white p-5 shadow-sm">
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">current recommendation</div>
+                            <div class="mt-1 text-[14px] font-medium lowercase text-stone-900">${escapeHtml(selectedMode.replace("_", " "))}</div>
+                        </div>
+                        <div class="rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">
+                            ${escapeHtml(projectSetup.status)}
+                        </div>
+                    </div>
+
+                    <div class="mt-5 space-y-4">
+                        <div class="rounded-2xl bg-stone-50 px-4 py-3">
+                            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">goal</div>
+                            <div class="mt-1 text-[13px] leading-relaxed lowercase text-stone-700">
+                                ${escapeHtml(projectSetup.brief.goal || "the copilot is still clarifying the outcome")}
+                            </div>
+                        </div>
+                        <div class="rounded-2xl bg-stone-50 px-4 py-3">
+                            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">progress</div>
+                            <div class="mt-1 text-[13px] leading-relaxed lowercase text-stone-700">
+                                ${escapeHtml(projectSetup.brief.currentProgress || "no clear progress signal yet")}
+                            </div>
+                        </div>
+                        <div class="rounded-2xl bg-stone-50 px-4 py-3">
+                            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">first actions</div>
+                            <div class="mt-3 flex flex-col gap-2">
+                                ${(projectSetup.starterTasks.length ? projectSetup.starterTasks : [{ title: "starter tasks will appear once the project becomes actionable" }]).slice(0, 4).map(
+    (task) => `
+                                            <div class="flex items-start gap-2 text-[13px] lowercase text-stone-700">
+                                                <span class="mt-1 h-2 w-2 rounded-full bg-stone-300"></span>
+                                                <span>${escapeHtml(task.title)}</span>
+                                            </div>
+                                        `
+  ).join("")}
+                            </div>
+                        </div>
+                        ${selectedMode === "routine_system" ? `
+                                <div class="rounded-2xl bg-stone-50 px-4 py-3">
+                                    <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">routine cadence</div>
+                                    <div class="mt-1 text-[13px] leading-relaxed lowercase text-stone-700">
+                                        ${escapeHtml(projectSetup.routine.cadence || "cadence will appear when the routine is shaped")}
+                                    </div>
+                                </div>
+                              ` : ""}
+                    </div>
+                </div>
+            </div>
+        </aside>
+    `;
+}
+function renderComposer(projectSetup) {
   return `
         <div class="border-t border-stone-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
             <div class="mx-auto max-w-4xl">
+                ${projectSetup.error ? `
+                        <div class="mb-3 rounded-[22px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-relaxed text-red-700 lowercase">
+                            ${escapeHtml(projectSetup.error)}
+                        </div>
+                      ` : ""}
                 <div class="group relative rounded-[30px] border border-stone-200 bg-stone-50 p-2 transition-all focus-within:border-stone-400 focus-within:bg-white focus-within:shadow-float">
                     <textarea
                         id="projectSetupInput"
                         aria-label="describe the project"
-                        class="min-h-[56px] max-h-[180px] w-full resize-none bg-transparent px-4 py-3 pr-16 text-[15px] leading-relaxed text-stone-900 outline-none placeholder:text-stone-400"
+                        class="min-h-[56px] max-h-[180px] w-full resize-none bg-transparent px-4 py-3 pr-16 text-[15px] leading-relaxed text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:opacity-60"
                         rows="1"
-                        placeholder="describe the project, deadline, or what success looks like..."
+                        placeholder="describe the project, what is blocked, or what success looks like..."
+                        ${projectSetup.busy ? "disabled" : ""}
                     ></textarea>
                     <button
                         data-action="send-project-setup"
                         aria-label="send project setup message"
-                        class="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-stone-900 text-white shadow-sm transition-all hover:scale-[1.03] hover:bg-stone-800"
+                        class="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-stone-900 text-white shadow-sm transition-all hover:scale-[1.03] hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
+                        ${projectSetup.busy ? "disabled" : ""}
                     >
                         <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                     </button>
                 </div>
                 <div class="mt-3 flex items-center justify-between gap-4 px-1 text-[11px] font-medium lowercase tracking-[0.14em] text-stone-400">
-                    <span>enter to send</span>
+                    <span>${projectSetup.busy ? "copilot is thinking" : "enter to send"}</span>
                     <span>shift + enter for a new line</span>
                 </div>
             </div>
@@ -11008,7 +11251,10 @@ function renderProjectSetupView({ projectSetup, projectCount }) {
                         </div>
                         <div>
                             <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">add project</div>
-                            <h1 class="mt-1 font-display text-3xl lowercase tracking-tight text-stone-900 sm:text-4xl">project drafting studio</h1>
+                            <h1 class="mt-1 font-display text-3xl lowercase tracking-tight text-stone-900 sm:text-4xl">ai project copilot</h1>
+                            <p class="mt-1 text-[14px] leading-relaxed text-stone-500 lowercase">
+                                the goal is not just naming the project. the goal is leaving this page with something you can actually execute.
+                            </p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
@@ -11030,37 +11276,40 @@ function renderProjectSetupView({ projectSetup, projectCount }) {
                 </div>
             </header>
 
-            <section class="min-h-0 flex-1 flex flex-col">
-                <div class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-                    <div class="mx-auto flex max-w-4xl flex-col gap-4 pb-10">
-                        ${renderHowItWorks(projectSetup)}
-
-                        <section class="flex flex-col gap-4">
-                            ${renderSetupMessages(projectSetup.messages)}
-                        </section>
-
-                        ${projectSetup.phase === "review" && projectSetup.draft ? renderReviewCard(projectSetup.draft) : ""}
+            <div class="min-h-0 flex-1 xl:grid xl:grid-cols-[minmax(0,1fr)_360px]">
+                <section class="min-h-0 flex flex-col">
+                    <div class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+                        <div class="mx-auto flex max-w-5xl flex-col gap-4 pb-10">
+                            ${renderQuickStarters(projectSetup)}
+                            <section class="flex flex-col gap-4">
+                                ${renderSetupMessages(projectSetup.messages)}
+                                ${projectSetup.busy ? renderTypingState() : ""}
+                            </section>
+                            ${projectSetup.phase === "review" ? renderReview(projectSetup) : ""}
+                        </div>
                     </div>
-                </div>
 
-                ${projectSetup.phase === "review" && projectSetup.draft ? `
-                            <div class="border-t border-stone-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
-                                <div class="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div class="text-[14px] leading-relaxed text-stone-500 lowercase">
-                                        create the project once the summary, next step, and starter tasks look right.
+                    ${projectSetup.phase === "review" ? `
+                                <div class="border-t border-stone-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+                                    <div class="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="text-[14px] leading-relaxed text-stone-500 lowercase">
+                                            create the project when the brief and execution shape feel right.
+                                        </div>
+                                        <button
+                                            data-action="confirm-project-draft"
+                                            class="inline-flex items-center justify-center gap-2 rounded-[18px] bg-stone-900 px-6 py-3 text-[14px] font-medium lowercase text-white shadow-sm transition-all hover:bg-stone-800 hover:shadow-md"
+                                            type="button"
+                                        >
+                                            create project
+                                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                                        </button>
                                     </div>
-                                    <button
-                                        data-action="confirm-project-draft"
-                                        class="inline-flex items-center justify-center gap-2 rounded-[18px] bg-stone-900 px-6 py-3 text-[14px] font-medium lowercase text-white shadow-sm transition-all hover:bg-stone-800 hover:shadow-md"
-                                        type="button"
-                                    >
-                                        create project
-                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                                    </button>
                                 </div>
-                            </div>
-                        ` : renderComposer()}
-            </section>
+                              ` : renderComposer(projectSetup)}
+                </section>
+
+                ${renderSidebar(projectSetup)}
+            </div>
         </div>
     `;
 }
@@ -11714,6 +11963,9 @@ function render() {
     state.pendingUpcomingScrollTarget = null;
     requestAnimationFrame(() => scrollUpcomingTargetIntoView(target));
   }
+  if (state.currentView === "project-setup") {
+    void maybeBootstrapProjectSetup();
+  }
 }
 function isModalInputFocused() {
   const active = document.activeElement;
@@ -11748,6 +12000,9 @@ function renderAfterDataSync() {
     updateTaskModal();
   }
   renderChrome();
+  if (state.currentView === "project-setup") {
+    void maybeBootstrapProjectSetup();
+  }
 }
 function closeConvexClient() {
   projectSubscription?.unsubscribe?.();
@@ -11938,16 +12193,6 @@ function sendMessage(textOverride) {
     }
   }, 500);
 }
-function sendProjectSetupMessage(textOverride) {
-  const input = document.getElementById("projectSetupInput");
-  if (!input) return;
-  const text = (textOverride ?? input.value).trim();
-  if (!text) return;
-  submitProjectSetupInput(state, text);
-  input.value = "";
-  input.style.height = "auto";
-  render();
-}
 async function runMutation(mutation, args, fallbackMessage = "Could not save change.") {
   if (!convexClient) return null;
   try {
@@ -11957,6 +12202,56 @@ async function runMutation(mutation, args, fallbackMessage = "Could not save cha
     showToast(fallbackMessage);
     return null;
   }
+}
+async function runAction(action, args, fallbackMessage = "Could not complete action.") {
+  if (!convexClient) return null;
+  try {
+    return await convexClient.action(action, args);
+  } catch (error) {
+    console.error(error);
+    showToast(fallbackMessage);
+    return null;
+  }
+}
+function getProjectSetupConversation() {
+  return state.projectSetup.messages.map((message) => ({
+    sender: message.sender,
+    text: message.text
+  }));
+}
+async function requestProjectCopilotReply(userText = "") {
+  if (state.projectSetup.busy) return;
+  beginProjectSetupInput(state, userText);
+  render();
+  const reply = await runAction(
+    api.projectCopilot.reply,
+    {
+      messages: getProjectSetupConversation()
+    },
+    "Could not reach the project copilot."
+  );
+  if (reply === null) {
+    failProjectSetupReply(state, "Project copilot is unavailable right now.");
+    render();
+    return;
+  }
+  receiveProjectSetupReply(state, reply);
+  render();
+}
+async function maybeBootstrapProjectSetup() {
+  if (!convexClient || !state.projectSetup.open || state.currentView !== "project-setup" || state.projectSetup.initialized || state.projectSetup.busy) {
+    return;
+  }
+  await requestProjectCopilotReply();
+}
+async function sendProjectSetupMessage(textOverride) {
+  const input = document.getElementById("projectSetupInput");
+  if (!input) return;
+  const text = (textOverride ?? input.value).trim();
+  if (!text) return;
+  input.value = "";
+  input.style.height = "auto";
+  await requestProjectCopilotReply(text);
 }
 async function createTask(title) {
   const resolvedDueAt = state.currentView === "today" ? TODAY_ISO : null;
@@ -12007,20 +12302,31 @@ async function addModalSubtask(taskId) {
   }
 }
 async function createProjectFromDraft() {
-  const draft = state.projectSetup.draft;
-  if (!draft) return;
+  const selectedMode = getProjectSetupSelectedMode(state.projectSetup);
   const createdProject = await runMutation(
-    api.projects.create,
+    api.projects.createFromCopilot,
     {
-      name: draft.name.trim(),
-      deadline: parseProjectDeadlineInput(draft.deadline) || draft.deadline,
-      summary: draft.summary.trim(),
-      nextStep: draft.nextStep.trim(),
-      starterTasks: draft.tasks.map((task, index) => ({
+      planType: selectedMode,
+      brief: {
+        name: state.projectSetup.brief.name.trim(),
+        deadline: state.projectSetup.brief.deadline || void 0,
+        goal: state.projectSetup.brief.goal.trim(),
+        currentProgress: state.projectSetup.brief.currentProgress.trim(),
+        successCriteria: state.projectSetup.brief.successCriteria.trim(),
+        constraints: state.projectSetup.brief.constraints.trim(),
+        blockersRisks: state.projectSetup.brief.blockersRisks.trim()
+      },
+      routine: selectedMode === "routine_system" ? {
+        cadence: state.projectSetup.routine.cadence.trim(),
+        checkpoints: state.projectSetup.routine.checkpoints.map((value) => value.trim()),
+        rules: state.projectSetup.routine.rules.map((value) => value.trim())
+      } : null,
+      starterTasks: state.projectSetup.starterTasks.map((task) => ({
+        id: task.id,
         title: task.title.trim(),
         description: task.description?.trim() || "",
-        dueAt: index === 0 ? TODAY_ISO : void 0,
-        priority: index === 0 ? "high" : "medium"
+        dueAt: task.dueAt || void 0,
+        priority: task.priority || "medium"
       }))
     },
     "Could not create project."
@@ -12207,7 +12513,7 @@ document.addEventListener("keydown", (event) => {
   }
   if (target?.id === "projectSetupInput" && event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
-    sendProjectSetupMessage();
+    void sendProjectSetupMessage();
   }
   if (target?.id === "modalNewSubtaskInput" && event.key === "Enter") {
     event.preventDefault();
@@ -12239,25 +12545,63 @@ document.addEventListener("input", (event) => {
     autoResize(target);
     return;
   }
-  if (target.id === "projectDraftName") {
-    updateProjectDraftField(state, "name", target.value);
+  if (target.id === "projectBriefName") {
+    updateProjectBriefField(state, "name", target.value);
     return;
   }
-  if (target.id === "projectDraftDeadline") {
-    updateProjectDraftField(state, "deadline", target.value);
+  if (target.id === "projectBriefDeadline") {
+    updateProjectBriefField(state, "deadline", target.value);
     return;
   }
-  if (target.id === "projectDraftSummary") {
-    updateProjectDraftField(state, "summary", target.value);
+  if (target.id === "projectBriefGoal") {
+    updateProjectBriefField(state, "goal", target.value);
     autoResize(target);
     return;
   }
-  if (target.id === "projectDraftNextStep") {
-    updateProjectDraftField(state, "nextStep", target.value);
+  if (target.id === "projectBriefCurrentProgress") {
+    updateProjectBriefField(state, "currentProgress", target.value);
+    autoResize(target);
     return;
   }
-  if (target.dataset.action === "edit-project-draft-task") {
-    updateProjectDraftTask(state, target.dataset.taskId, target.value);
+  if (target.id === "projectBriefSuccessCriteria") {
+    updateProjectBriefField(state, "successCriteria", target.value);
+    autoResize(target);
+    return;
+  }
+  if (target.id === "projectBriefConstraints") {
+    updateProjectBriefField(state, "constraints", target.value);
+    autoResize(target);
+    return;
+  }
+  if (target.id === "projectBriefBlockersRisks") {
+    updateProjectBriefField(state, "blockersRisks", target.value);
+    autoResize(target);
+    return;
+  }
+  if (target.id === "projectRoutineCadence") {
+    updateProjectRoutineField(state, "cadence", target.value);
+    return;
+  }
+  if (target.dataset.action === "edit-project-task-title") {
+    updateProjectSetupTaskFieldValue(state, target.dataset.taskId, "title", target.value);
+    return;
+  }
+  if (target.dataset.action === "edit-project-task-description") {
+    updateProjectSetupTaskFieldValue(state, target.dataset.taskId, "description", target.value);
+    autoResize(target);
+    return;
+  }
+  if (target.dataset.action === "edit-project-task-due-at") {
+    updateProjectSetupTaskFieldValue(state, target.dataset.taskId, "dueAt", target.value);
+    return;
+  }
+  if (target.dataset.action === "edit-project-routine-item") {
+    updateProjectRoutineItem(
+      state,
+      target.dataset.listKey,
+      Number(target.dataset.index),
+      target.value
+    );
   }
 });
 document.addEventListener("change", (event) => {
@@ -12339,6 +12683,10 @@ document.addEventListener("change", (event) => {
       },
       "Could not update priority."
     );
+    return;
+  }
+  if (target.dataset.action === "edit-project-task-priority") {
+    updateProjectSetupTaskFieldValue(state, target.dataset.taskId, "priority", target.value);
   }
 });
 document.addEventListener("click", (event) => {
@@ -12538,15 +12886,44 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "send-project-setup") {
-    sendProjectSetupMessage();
+    void sendProjectSetupMessage();
     return;
   }
   if (action === "project-setup-suggestion") {
-    sendProjectSetupMessage(suggestion);
+    void sendProjectSetupMessage(suggestion);
     return;
   }
   if (action === "confirm-project-draft") {
     void createProjectFromDraft();
+    return;
+  }
+  if (action === "select-project-setup-mode") {
+    setProjectSetupMode(state, actionElement.dataset.mode);
+    render();
+    return;
+  }
+  if (action === "add-project-task") {
+    addProjectSetupStarterTask(state);
+    render();
+    return;
+  }
+  if (action === "remove-project-task") {
+    removeProjectSetupStarterTask(state, actionElement.dataset.taskId);
+    render();
+    return;
+  }
+  if (action === "add-project-routine-item") {
+    addProjectRoutineItem(state, actionElement.dataset.listKey);
+    render();
+    return;
+  }
+  if (action === "remove-project-routine-item") {
+    removeProjectRoutineItem(
+      state,
+      actionElement.dataset.listKey,
+      Number(actionElement.dataset.index)
+    );
+    render();
     return;
   }
   if (action === "archive-project") {

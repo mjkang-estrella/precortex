@@ -3,6 +3,13 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { requireOwnerId } from "./lib/auth";
 import { normalizeOptionalIsoDate, requireTrimmedText } from "./lib/domain.js";
+import {
+    planTypeValue,
+    projectBriefValue,
+    routineValue,
+    starterTaskValue,
+    validateProjectCreateFromCopilot,
+} from "./lib/projectCopilot.js";
 
 function toProjectResponse(project: {
     _id: Id<"projects">;
@@ -10,6 +17,21 @@ function toProjectResponse(project: {
     deadline?: string;
     summary: string;
     nextStep: string;
+    planType?: "task_plan" | "routine_system";
+    brief?: {
+        name: string;
+        deadline?: string;
+        goal: string;
+        currentProgress: string;
+        successCriteria: string;
+        constraints: string;
+        blockersRisks: string;
+    };
+    routine?: {
+        cadence: string;
+        checkpoints: string[];
+        rules: string[];
+    };
     source?: "seed" | "user";
     createdAt: number;
     updatedAt: number;
@@ -20,6 +42,25 @@ function toProjectResponse(project: {
         deadline: project.deadline ?? null,
         summary: project.summary,
         nextStep: project.nextStep,
+        planType: project.planType ?? null,
+        brief: project.brief
+            ? {
+                  name: project.brief.name,
+                  deadline: project.brief.deadline ?? null,
+                  goal: project.brief.goal,
+                  currentProgress: project.brief.currentProgress,
+                  successCriteria: project.brief.successCriteria,
+                  constraints: project.brief.constraints,
+                  blockersRisks: project.brief.blockersRisks,
+              }
+            : null,
+        routine: project.routine
+            ? {
+                  cadence: project.routine.cadence,
+                  checkpoints: [...project.routine.checkpoints],
+                  rules: [...project.routine.rules],
+              }
+            : null,
         source: project.source ?? "user",
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
@@ -47,7 +88,7 @@ export const list = query({
         return projects
             .filter((project) => !project.archivedAt)
             .sort((left, right) => right.createdAt - left.createdAt || left.name.localeCompare(right.name))
-            .map(toProjectResponse);
+            .map((project) => toProjectResponse(project as any));
     },
 });
 
@@ -85,6 +126,9 @@ export const create = mutation({
             deadline: normalizeOptionalIsoDate(args.deadline, "deadline"),
             summary: requireTrimmedText(args.summary, "Project summary"),
             nextStep: requireTrimmedText(args.nextStep, "Project next step"),
+            planType: undefined,
+            brief: undefined,
+            routine: undefined,
             source: "user",
             archivedAt: undefined,
             createdAt: now,
@@ -112,6 +156,64 @@ export const create = mutation({
                 isStale: false,
                 subtasks: [],
                 sortKey: firstSortKey - (starterTasks.length - index) * 1024,
+                createdAt: now,
+                updatedAt: now,
+                completedAt: undefined,
+            });
+        }
+
+        const project = await ensureProjectOwner(ctx, ownerId, projectId);
+        return toProjectResponse({ _id: projectId, ...project });
+    },
+});
+
+export const createFromCopilot = mutation({
+    args: {
+        planType: planTypeValue,
+        brief: projectBriefValue,
+        routine: v.optional(v.union(routineValue, v.null())),
+        starterTasks: v.array(starterTaskValue),
+    },
+    handler: async (ctx, args) => {
+        const ownerId = await requireOwnerId(ctx);
+        const now = Date.now();
+        const normalized = validateProjectCreateFromCopilot(args);
+
+        const projectId = await ctx.db.insert("projects", {
+            ownerId,
+            name: normalized.brief.name,
+            deadline: normalized.brief.deadline,
+            summary: normalized.summary,
+            nextStep: normalized.nextStep,
+            planType: normalized.planType,
+            brief: normalized.brief,
+            routine: normalized.routine ?? undefined,
+            source: "user",
+            archivedAt: undefined,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        const existingTasks = await ctx.db
+            .query("tasks")
+            .withIndex("by_owner_sort", (q) => q.eq("ownerId", ownerId))
+            .collect();
+        const firstSortKey = existingTasks[0]?.sortKey ?? 0;
+
+        for (const [index, task] of normalized.starterTasks.entries()) {
+            await ctx.db.insert("tasks", {
+                ownerId,
+                title: task.title,
+                description: task.description ?? "",
+                status: "todo",
+                dueAt: task.dueAt,
+                projectId,
+                priority: task.priority ?? (index === 0 ? "high" : "medium"),
+                tags: [],
+                sourceLabel: undefined,
+                isStale: false,
+                subtasks: [],
+                sortKey: firstSortKey - (normalized.starterTasks.length - index) * 1024,
                 createdAt: now,
                 updatedAt: now,
                 completedAt: undefined,

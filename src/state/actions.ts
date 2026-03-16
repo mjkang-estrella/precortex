@@ -5,9 +5,19 @@ import {
     toLocalISODate,
 } from "../utils/date.js";
 import {
-    cloneProjectDraft,
+    addProjectSetupRoutineItem,
+    addProjectSetupTask,
+    applyProjectSetupReply,
+    beginProjectSetupRequest,
     createProjectSetupState,
-    submitProjectSetupMessage,
+    failProjectSetupRequest,
+    removeProjectSetupRoutineItem,
+    removeProjectSetupTask,
+    setProjectSetupModeOverride,
+    updateProjectSetupBriefField,
+    updateProjectSetupRoutineField,
+    updateProjectSetupRoutineItem,
+    updateProjectSetupTaskField,
 } from "./project-bay.js";
 
 export function openTaskModal(state, taskId) {
@@ -134,45 +144,50 @@ export function restartProjectSetup(state) {
     state.currentView = "project-setup";
 }
 
-export function submitProjectSetupInput(state, text) {
-    state.projectSetup = submitProjectSetupMessage(state.projectSetup, text);
+export function beginProjectSetupInput(state, text = "") {
+    state.projectSetup = beginProjectSetupRequest(state.projectSetup, text);
 }
 
-export function updateProjectDraftField(state, field, value) {
-    if (!state.projectSetup.draft) return;
-
-    const draft = cloneProjectDraft(state.projectSetup.draft);
-    draft[field] = value;
-
-    if (field === "nextStep" && draft.tasks.length) {
-        draft.tasks[0] = { ...draft.tasks[0], title: value };
-    }
-
-    if (field === "name") {
-        draft.tasks = draft.tasks.map((task, index) => {
-            if (index === 1) {
-                return {
-                    ...task,
-                    title: `Define the success criteria for ${value}`,
-                };
-            }
-
-            return task;
-        });
-    }
-
-    state.projectSetup.draft = draft;
+export function receiveProjectSetupReply(state, reply) {
+    state.projectSetup = applyProjectSetupReply(state.projectSetup, reply);
 }
 
-export function updateProjectDraftTask(state, taskId, value) {
-    if (!state.projectSetup.draft) return;
+export function failProjectSetupReply(state, message) {
+    state.projectSetup = failProjectSetupRequest(state.projectSetup, message);
+}
 
-    const draft = cloneProjectDraft(state.projectSetup.draft);
-    draft.tasks = draft.tasks.map((task) => (task.id === taskId ? { ...task, title: value } : task));
+export function updateProjectBriefField(state, field, value) {
+    state.projectSetup = updateProjectSetupBriefField(state.projectSetup, field, value);
+}
 
-    if (draft.tasks[0]?.id === taskId) {
-        draft.nextStep = value;
-    }
+export function setProjectSetupMode(state, mode) {
+    state.projectSetup = setProjectSetupModeOverride(state.projectSetup, mode);
+}
 
-    state.projectSetup.draft = draft;
+export function updateProjectSetupTaskFieldValue(state, taskId, field, value) {
+    state.projectSetup = updateProjectSetupTaskField(state.projectSetup, taskId, field, value);
+}
+
+export function addProjectSetupStarterTask(state) {
+    state.projectSetup = addProjectSetupTask(state.projectSetup);
+}
+
+export function removeProjectSetupStarterTask(state, taskId) {
+    state.projectSetup = removeProjectSetupTask(state.projectSetup, taskId);
+}
+
+export function updateProjectRoutineField(state, field, value) {
+    state.projectSetup = updateProjectSetupRoutineField(state.projectSetup, field, value);
+}
+
+export function updateProjectRoutineItem(state, listKey, index, value) {
+    state.projectSetup = updateProjectSetupRoutineItem(state.projectSetup, listKey, index, value);
+}
+
+export function addProjectRoutineItem(state, listKey) {
+    state.projectSetup = addProjectSetupRoutineItem(state.projectSetup, listKey);
+}
+
+export function removeProjectRoutineItem(state, listKey, index) {
+    state.projectSetup = removeProjectSetupRoutineItem(state.projectSetup, listKey, index);
 }

@@ -1,6 +1,6 @@
-import type { MutationCtx, QueryCtx } from "../_generated/server";
+import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 
-type AuthCtx = MutationCtx | QueryCtx;
+type AuthCtx = ActionCtx | MutationCtx | QueryCtx;
 
 export async function requireOwnerId(ctx: AuthCtx) {
     const identity = await ctx.auth.getUserIdentity();
