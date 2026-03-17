@@ -293,6 +293,53 @@ body.assistant-resizing * {
     }
 }
 
+/* Landing page animations */
+@keyframes landingReveal {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes scrollLine {
+    0% {
+        transform: scaleY(0);
+        transform-origin: top;
+    }
+    50% {
+        transform: scaleY(1);
+        transform-origin: top;
+    }
+    51% {
+        transform-origin: bottom;
+    }
+    100% {
+        transform: scaleY(0);
+        transform-origin: bottom;
+    }
+}
+
+.landing-reveal {
+    opacity: 0;
+    animation: landingReveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: calc(var(--reveal-i, 0) * 120ms + 200ms);
+}
+
+.landing-scroll-line {
+    animation: scrollLine 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    animation-delay: 1.6s;
+}
+
+.landing-page nav {
+    background: linear-gradient(to bottom, #f6f6f5 60%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

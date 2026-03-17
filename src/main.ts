@@ -27,6 +27,7 @@ import { createStore } from "./state/store.js";
 import { TODAY_ISO, parseLocalISODate } from "./utils/date.js";
 import { renderAssistantPanel } from "./views/assistant-view.js";
 import { renderAuthError, renderAuthLoading, renderAuthScreen } from "./views/auth-view.js";
+import { renderLandingPage } from "./views/landing-view.js";
 import { renderInboxView } from "./views/inbox-view.js";
 import { renderTaskModal } from "./views/modal-view.js";
 import { renderNavigation } from "./views/navigation-view.js";
@@ -807,7 +808,7 @@ function render() {
             return;
         }
 
-        dom.authRoot.innerHTML = renderAuthScreen();
+        dom.authRoot.innerHTML = renderLandingPage();
         return;
     }
 
@@ -1740,6 +1741,12 @@ document.addEventListener("click", (event) => {
 
     if (action === "login") {
         void startLogin();
+        return;
+    }
+
+    if (action === "scroll-features") {
+        const el = document.getElementById("landingFeatures");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
         return;
     }
 
