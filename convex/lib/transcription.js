@@ -31,11 +31,17 @@ export function validateVoiceNoteInput(audio, mimeType) {
     }
 }
 
-async function parseJsonResponse(response) {
+async function parseJsonResponse(response, context = {}) {
     const text = await response.text();
     const data = text ? JSON.parse(text) : {};
 
     if (!response.ok) {
+        console.error("AssemblyAI request failed", {
+            status: response.status,
+            error: data?.error,
+            message: data?.message,
+            context,
+        });
         throw new Error(
             cleanString(data?.error) ||
                 cleanString(data?.message) ||
@@ -66,26 +72,47 @@ async function uploadAudio({ apiKey, audio, fetchImpl }) {
 }
 
 async function createTranscript({ apiKey, audioUrl, fetchImpl }) {
+    const requestBody = {
+        audio_url: audioUrl,
+        speech_models: DEFAULT_SPEECH_MODELS,
+        language_detection: true,
+    };
+    console.log("Submitting AssemblyAI transcript request", requestBody);
     const response = await fetchImpl(ASSEMBLY_TRANSCRIPT_URL, {
         method: "POST",
         headers: {
             authorization: apiKey,
             "content-type": "application/json",
         },
-        body: JSON.stringify({
-            audio_url: audioUrl,
-            speech_models: DEFAULT_SPEECH_MODELS,
-            language_detection: true,
-        }),
+        body: JSON.stringify(requestBody),
     });
 
-    const data = await parseJsonResponse(response);
+    const data = await parseJsonResponse(response, { requestBody });
     const transcriptId = cleanString(data.id);
     if (!transcriptId) {
         throw new Error("AssemblyAI did not return a transcript ID.");
     }
 
     return transcriptId;
+}
+
+export async function submitToAssemblyAi(audio, mimeType, options = {}) {
+    validateVoiceNoteInput(audio, mimeType);
+
+    const apiKey = cleanString(options.apiKey);
+    if (!apiKey) {
+        throw new Error("AssemblyAI is not configured.");
+    }
+
+    const fetchImpl = options.fetchImpl || fetch;
+    const uploadUrl = await uploadAudio({ apiKey, audio, fetchImpl });
+    const transcriptId = await createTranscript({ apiKey, audioUrl: uploadUrl, fetchImpl });
+
+    return {
+        uploadUrl,
+        transcriptId,
+        speechModels: [...DEFAULT_SPEECH_MODELS],
+    };
 }
 
 export function normalizeTranscriptText(payload) {
@@ -146,8 +173,10 @@ export async function transcribeWithAssemblyAi(audio, mimeType, options = {}) {
     const intervalMs = Number.isFinite(options.intervalMs) ? options.intervalMs : 3000;
     const maxPollAttempts = Number.isFinite(options.maxPollAttempts) ? options.maxPollAttempts : 40;
 
-    const uploadUrl = await uploadAudio({ apiKey, audio, fetchImpl });
-    const transcriptId = await createTranscript({ apiKey, audioUrl: uploadUrl, fetchImpl });
+    const { transcriptId } = await submitToAssemblyAi(audio, mimeType, {
+        apiKey,
+        fetchImpl,
+    });
 
     return pollTranscript({
         apiKey,
