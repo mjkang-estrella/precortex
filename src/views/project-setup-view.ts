@@ -14,6 +14,40 @@ const stepCopy = [
     "review the actionable output",
 ];
 
+function renderVoiceButton(status) {
+    if (status === "recording") {
+        return `
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <rect x="7" y="7" width="10" height="10" rx="2"></rect>
+            </svg>
+        `;
+    }
+
+    if (status === "transcribing") {
+        return `
+            <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.2" opacity="0.25"></circle>
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path>
+            </svg>
+        `;
+    }
+
+    return `
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V6a3 3 0 0 1 3-3"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+            <line x1="8" y1="22" x2="16" y2="22"></line>
+        </svg>
+    `;
+}
+
+function getVoiceStatusCopy(status, busy) {
+    if (status === "recording") return "listening...";
+    if (status === "transcribing") return "transcribing voice note...";
+    return busy ? "copilot is thinking" : "enter to send";
+}
+
 function renderSetupMessages(messages) {
     return messages
         .map((message, index) => {
@@ -447,7 +481,10 @@ function renderSidebar(projectSetup) {
     `;
 }
 
-function renderComposer(projectSetup) {
+function renderComposer(projectSetup, voiceState, draftValue) {
+    const voiceBusy = voiceState.status === "transcribing";
+    const controlsDisabled = projectSetup.busy || voiceBusy;
+
     return `
         <div class="border-t border-stone-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
             <div class="mx-auto max-w-4xl">
@@ -462,23 +499,37 @@ function renderComposer(projectSetup) {
                     <textarea
                         id="projectSetupInput"
                         aria-label="describe the project"
-                        class="min-h-[56px] max-h-[180px] w-full resize-none bg-transparent px-4 py-3 pr-16 text-[15px] leading-relaxed text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        class="min-h-[56px] max-h-[180px] w-full resize-none bg-transparent px-4 py-3 pr-28 text-[15px] leading-relaxed text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:opacity-60"
                         rows="1"
                         placeholder="describe the project, what is blocked, or what success looks like..."
-                        ${projectSetup.busy ? "disabled" : ""}
-                    ></textarea>
+                        ${voiceBusy ? "disabled" : ""}
+                    >${escapeHtml(draftValue || "")}</textarea>
+                    <button
+                        data-action="toggle-project-setup-voice"
+                        aria-label="${voiceState.status === "recording" ? "stop voice recording" : "start voice recording"}"
+                        aria-pressed="${voiceState.status === "recording" ? "true" : "false"}"
+                        class="absolute bottom-3 right-16 flex h-11 w-11 items-center justify-center rounded-full transition-all ${
+                            voiceState.status === "recording"
+                                ? "bg-red-500 text-white shadow-sm scale-[1.03]"
+                                : "border border-stone-200 bg-white text-stone-500 hover:border-stone-400 hover:text-stone-900"
+                        } disabled:cursor-not-allowed disabled:opacity-60"
+                        type="button"
+                        ${controlsDisabled ? "disabled" : ""}
+                    >
+                        ${renderVoiceButton(voiceState.status)}
+                    </button>
                     <button
                         data-action="send-project-setup"
                         aria-label="send project setup message"
                         class="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-stone-900 text-white shadow-sm transition-all hover:scale-[1.03] hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
-                        ${projectSetup.busy ? "disabled" : ""}
+                        ${controlsDisabled ? "disabled" : ""}
                     >
                         <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                     </button>
                 </div>
                 <div class="mt-3 flex items-center justify-between gap-4 px-1 text-[11px] font-medium lowercase tracking-[0.14em] text-stone-400">
-                    <span>${projectSetup.busy ? "copilot is thinking" : "enter to send"}</span>
+                    <span>${getVoiceStatusCopy(voiceState.status, projectSetup.busy)}</span>
                     <span>shift + enter for a new line</span>
                 </div>
             </div>
@@ -486,7 +537,7 @@ function renderComposer(projectSetup) {
     `;
 }
 
-export function renderProjectSetupView({ projectSetup, projectCount }) {
+export function renderProjectSetupView({ projectSetup, projectCount, voiceState, draftValue }) {
     const hasProjects = projectCount > 0;
 
     return `
@@ -556,7 +607,7 @@ export function renderProjectSetupView({ projectSetup, projectCount }) {
                                     </div>
                                 </div>
                               `
-                            : renderComposer(projectSetup)
+                            : renderComposer(projectSetup, voiceState, draftValue)
                     }
                 </section>
 

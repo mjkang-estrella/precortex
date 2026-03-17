@@ -13,9 +13,11 @@ import type * as debug from "../debug.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_domain from "../lib/domain.js";
 import type * as lib_projectCopilot from "../lib/projectCopilot.js";
+import type * as lib_transcription from "../lib/transcription.js";
 import type * as projectCopilot from "../projectCopilot.js";
 import type * as projects from "../projects.js";
 import type * as tasks from "../tasks.js";
+import type * as transcription from "../transcription.js";
 
 import type {
   ApiFromModules,
@@ -29,9 +31,11 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/domain": typeof lib_domain;
   "lib/projectCopilot": typeof lib_projectCopilot;
+  "lib/transcription": typeof lib_transcription;
   projectCopilot: typeof projectCopilot;
   projects: typeof projects;
   tasks: typeof tasks;
+  transcription: typeof transcription;
 }>;
 
 /**

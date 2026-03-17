@@ -39,6 +39,7 @@ const AUTH_HINT_STORAGE_KEY = "precortex.authHint";
 const ASSISTANT_WIDTH_STORAGE_KEY = "precortex.assistantWidth";
 const DESKTOP_ASSISTANT_MIN_WIDTH = 340;
 const DESKTOP_ASSISTANT_MAX_WIDTH_RATIO = 0.45;
+const VOICE_TRANSCRIPTION_ERROR = "Could not transcribe the voice note.";
 const store = createStore();
 const state = store.state;
 let assistantConfigs = store.assistantConfigs;
@@ -63,6 +64,43 @@ const assistantResizeState = {
 };
 let preferredDesktopAssistantWidth = readStoredAssistantWidth();
 
+type VoiceComposerKey = "assistant" | "projectSetup";
+type VoiceStatus = "idle" | "recording" | "transcribing";
+
+const composerDrafts: Record<VoiceComposerKey, string> = {
+    assistant: "",
+    projectSetup: "",
+};
+
+const voiceControllers: Record<
+    VoiceComposerKey,
+    {
+        status: VoiceStatus;
+        mediaRecorder: MediaRecorder | null;
+        stream: MediaStream | null;
+        mimeType: string;
+        chunks: Blob[];
+        sessionId: number;
+    }
+> = {
+    assistant: {
+        status: "idle",
+        mediaRecorder: null,
+        stream: null,
+        mimeType: "",
+        chunks: [],
+        sessionId: 0,
+    },
+    projectSetup: {
+        status: "idle",
+        mediaRecorder: null,
+        stream: null,
+        mimeType: "",
+        chunks: [],
+        sessionId: 0,
+    },
+};
+
 const dom = {
     authRoot: byId<HTMLElement>("authRoot"),
     appShell: byId<HTMLElement>("appShell"),
@@ -74,6 +112,7 @@ const dom = {
     assistantTitle: byId<HTMLElement>("assistantTitle"),
     assistantQuickActionsLabel: byId<HTMLElement>("assistantQuickActionsLabel"),
     assistantInputHint: byId<HTMLElement>("assistantInputHint"),
+    assistantVoiceStatus: byId<HTMLElement>("assistantVoiceStatus"),
     assistantResizeHandle: byId<HTMLElement>("assistantResizeHandle"),
     assistantPanel: byId<HTMLElement>("assistantPanel"),
     navInboxCount: byId<HTMLElement>("navInboxCount"),
@@ -85,6 +124,8 @@ const dom = {
     reopenAssistantButton: byId<HTMLButtonElement>("reopenAssistantButton"),
     taskModal: byId<HTMLElement>("taskModal"),
     aiInput: byId<HTMLTextAreaElement>("aiInput"),
+    assistantVoiceButton: byId<HTMLButtonElement>("assistantVoiceButton"),
+    assistantSendButton: byId<HTMLButtonElement>("assistantSendButton"),
     toastContainer: byId<HTMLElement>("toastContainer"),
 };
 
@@ -96,6 +137,63 @@ const destinationLabels = {
 };
 
 let activeToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function getProjectSetupInput() {
+    return document.getElementById("projectSetupInput") as HTMLTextAreaElement | null;
+}
+
+function supportsVoiceRecording() {
+    return Boolean(
+        navigator.mediaDevices?.getUserMedia &&
+        typeof MediaRecorder !== "undefined",
+    );
+}
+
+function getPreferredRecordingMimeType() {
+    if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+        return "";
+    }
+
+    return MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "";
+}
+
+function getComposerDraft(key: VoiceComposerKey) {
+    return composerDrafts[key];
+}
+
+function setComposerDraft(key: VoiceComposerKey, value: string) {
+    composerDrafts[key] = value;
+}
+
+function syncComposerDraftToDom(key: VoiceComposerKey) {
+    const input = key === "assistant" ? dom.aiInput : getProjectSetupInput();
+    if (!input) return;
+
+    if (input.value !== composerDrafts[key]) {
+        input.value = composerDrafts[key];
+    }
+
+    autoResize(input);
+}
+
+function focusComposer(key: VoiceComposerKey) {
+    const input = key === "assistant" ? dom.aiInput : getProjectSetupInput();
+    if (!input) return;
+    input.focus();
+    if ("setSelectionRange" in input) {
+        input.setSelectionRange(input.value.length, input.value.length);
+    }
+}
+
+function getVoiceStatus(key: VoiceComposerKey) {
+    return voiceControllers[key].status;
+}
+
+function setVoiceStatus(key: VoiceComposerKey, status: VoiceStatus) {
+    voiceControllers[key].status = status;
+}
 
 function readStoredAssistantWidth() {
     try {
@@ -299,7 +397,10 @@ function renderMainView(suppressAnimation = false) {
         dom.mainView.innerHTML = renderProjectSetupView({
             projectSetup: state.projectSetup,
             projectCount: state.projects.length,
+            voiceState: { status: getVoiceStatus("projectSetup") },
+            draftValue: getComposerDraft("projectSetup"),
         });
+        syncComposerDraftToDom("projectSetup");
         return;
     }
 
@@ -389,8 +490,10 @@ function updateAssistant() {
         config,
         messages: getCurrentAssistantMessages(state),
         assistantIcons,
+        voiceState: { status: getVoiceStatus("assistant") },
         dom,
     });
+    syncComposerDraftToDom("assistant");
 }
 
 function scrollUpcomingTargetIntoView(dateIso) {
@@ -424,6 +527,18 @@ function renderChrome() {
     const hideAssistantSurface = state.currentView === "project-setup";
     const drawersOpen = mobile && (state.mobileNavOpen || (state.assistantOpen && !hideAssistantSurface));
     const blockingSurfaceOpen = Boolean(getSelectedTask(state));
+
+    if (hideAssistantSurface && getVoiceStatus("assistant") !== "idle") {
+        cancelVoiceComposer("assistant");
+    }
+
+    if (state.currentView !== "project-setup" && getVoiceStatus("projectSetup") !== "idle") {
+        cancelVoiceComposer("projectSetup");
+    }
+
+    if (!state.assistantOpen && getVoiceStatus("assistant") !== "idle") {
+        cancelVoiceComposer("assistant");
+    }
 
     dom.mobileNav.classList.toggle("translate-x-0", mobile && state.mobileNavOpen);
     dom.mobileNav.classList.toggle("-translate-x-full", mobile && !state.mobileNavOpen);
@@ -471,6 +586,181 @@ function renderChrome() {
     dom.reopenAssistantButton.classList.toggle("translate-y-4", !showAssistantButton);
     dom.reopenAssistantButton.classList.toggle("scale-90", !showAssistantButton);
     dom.reopenAssistantButton.classList.toggle("pointer-events-none", !showAssistantButton);
+}
+
+function resetVoiceController(key: VoiceComposerKey) {
+    const controller = voiceControllers[key];
+
+    if (controller.stream) {
+        controller.stream.getTracks().forEach((track) => track.stop());
+    }
+
+    controller.mediaRecorder = null;
+    controller.stream = null;
+    controller.mimeType = "";
+    controller.chunks = [];
+}
+
+function refreshVoiceSurface(key: VoiceComposerKey) {
+    if (key === "assistant") {
+        updateAssistant();
+        return;
+    }
+
+    if (state.currentView === "project-setup") {
+        renderMainView(true);
+    }
+}
+
+function cancelVoiceComposer(key: VoiceComposerKey) {
+    const controller = voiceControllers[key];
+    controller.sessionId += 1;
+
+    const recorder = controller.mediaRecorder;
+    if (recorder && recorder.state !== "inactive") {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        recorder.onerror = null;
+        recorder.stop();
+    }
+
+    resetVoiceController(key);
+    setVoiceStatus(key, "idle");
+    refreshVoiceSurface(key);
+}
+
+async function transcribeVoiceBlob(key: VoiceComposerKey, blob: Blob, mimeType: string, sessionId: number) {
+    if (!convexClient) {
+        throw new Error("Voice transcription is unavailable right now.");
+    }
+
+    const audio = await blob.arrayBuffer();
+    const transcript = await convexClient.action(api.transcription.transcribeVoiceNote, {
+        audio,
+        mimeType,
+    });
+
+    if (!transcript || typeof transcript.text !== "string") {
+        throw new Error("Voice transcription did not return any text.");
+    }
+
+    if (voiceControllers[key].sessionId !== sessionId) {
+        return;
+    }
+
+    setComposerDraft(key, transcript.text);
+    setVoiceStatus(key, "idle");
+    refreshVoiceSurface(key);
+    syncComposerDraftToDom(key);
+    focusComposer(key);
+}
+
+async function stopVoiceRecording(key: VoiceComposerKey) {
+    const controller = voiceControllers[key];
+    if (!controller.mediaRecorder || controller.mediaRecorder.state === "inactive") return;
+
+    const sessionId = controller.sessionId;
+    const recorder = controller.mediaRecorder;
+
+    setVoiceStatus(key, "transcribing");
+    refreshVoiceSurface(key);
+
+    await new Promise<void>((resolve, reject) => {
+        recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                controller.chunks.push(event.data);
+            }
+        };
+
+        recorder.onerror = () => {
+            reject(new Error("Voice recording failed."));
+        };
+
+        recorder.onstop = () => {
+            resolve();
+        };
+
+        recorder.stop();
+    });
+
+    const blob = new Blob(controller.chunks, {
+        type: controller.mimeType || recorder.mimeType || "audio/webm",
+    });
+    const mimeType = blob.type || controller.mimeType || "audio/webm";
+
+    resetVoiceController(key);
+
+    try {
+        await transcribeVoiceBlob(key, blob, mimeType, sessionId);
+    } catch (error) {
+        if (voiceControllers[key].sessionId !== sessionId) {
+            return;
+        }
+
+        setVoiceStatus(key, "idle");
+        refreshVoiceSurface(key);
+        const message = error instanceof Error ? error.message : VOICE_TRANSCRIPTION_ERROR;
+        showToast(message);
+    }
+}
+
+async function startVoiceRecording(key: VoiceComposerKey) {
+    if (!supportsVoiceRecording()) {
+        showToast("Voice recording is not supported in this browser.");
+        return;
+    }
+
+    if (!convexClient) {
+        showToast("Voice transcription is unavailable right now.");
+        return;
+    }
+
+    const otherKey = key === "assistant" ? "projectSetup" : "assistant";
+    if (getVoiceStatus(otherKey) !== "idle") {
+        cancelVoiceComposer(otherKey);
+    }
+
+    const controller = voiceControllers[key];
+    controller.sessionId += 1;
+    controller.chunks = [];
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mimeType = getPreferredRecordingMimeType();
+        const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+        controller.stream = stream;
+        controller.mediaRecorder = recorder;
+        controller.mimeType = recorder.mimeType || mimeType || "audio/webm";
+        setVoiceStatus(key, "recording");
+        refreshVoiceSurface(key);
+        recorder.start();
+    } catch (error) {
+        resetVoiceController(key);
+        setVoiceStatus(key, "idle");
+        refreshVoiceSurface(key);
+
+        const message =
+            error instanceof DOMException && error.name === "NotAllowedError"
+                ? "Microphone access was denied."
+                : error instanceof DOMException && error.name === "NotFoundError"
+                  ? "No microphone was found."
+                  : "Could not start voice recording.";
+        showToast(message);
+    }
+}
+
+async function toggleVoiceRecording(key: VoiceComposerKey) {
+    if (getVoiceStatus(key) === "recording") {
+        await stopVoiceRecording(key);
+        return;
+    }
+
+    if (getVoiceStatus(key) === "transcribing") {
+        return;
+    }
+
+    await startVoiceRecording(key);
 }
 
 function endAssistantResize() {
@@ -612,6 +902,9 @@ function closeConvexClient() {
 }
 
 function resetAppState() {
+    cancelVoiceComposer("assistant");
+    cancelVoiceComposer("projectSetup");
+
     const freshStore = createStore();
 
     Object.assign(state, freshStore.state);
@@ -769,7 +1062,7 @@ function focusTaskCardTitle(taskId) {
 
 function sendMessage(textOverride?: string) {
     const view = state.currentView;
-    const text = (textOverride ?? dom.aiInput.value).trim();
+    const text = (textOverride ?? getComposerDraft("assistant") ?? dom.aiInput.value).trim();
     if (!text) return;
 
     if (view === "project") {
@@ -783,6 +1076,7 @@ function sendMessage(textOverride?: string) {
     }
     updateAssistant();
 
+    setComposerDraft("assistant", "");
     dom.aiInput.value = "";
     dom.aiInput.style.height = "auto";
 
@@ -894,12 +1188,13 @@ async function maybeBootstrapProjectSetup() {
 }
 
 async function sendProjectSetupMessage(textOverride?: string) {
-    const input = document.getElementById("projectSetupInput") as HTMLTextAreaElement | null;
+    const input = getProjectSetupInput();
     if (!input) return;
 
-    const text = (textOverride ?? input.value).trim();
+    const text = (textOverride ?? getComposerDraft("projectSetup") ?? input.value).trim();
     if (!text) return;
 
+    setComposerDraft("projectSetup", "");
     input.value = "";
     input.style.height = "auto";
     await requestProjectCopilotReply(text);
@@ -1257,7 +1552,14 @@ document.addEventListener("input", (event) => {
         return;
     }
 
-    if (target.id === "aiInput" || target.id === "projectSetupInput") {
+    if (target.id === "aiInput") {
+        setComposerDraft("assistant", target.value);
+        autoResize(target);
+        return;
+    }
+
+    if (target.id === "projectSetupInput") {
+        setComposerDraft("projectSetup", target.value);
         autoResize(target);
         return;
     }
@@ -1632,7 +1934,13 @@ document.addEventListener("click", (event) => {
         return;
     }
 
+    if (action === "toggle-assistant-voice") {
+        void toggleVoiceRecording("assistant");
+        return;
+    }
+
     if (action === "open-project-setup") {
+        cancelVoiceComposer("assistant");
         actions.openProjectSetup(state);
         closeMobileChrome();
         render();
@@ -1643,17 +1951,24 @@ document.addEventListener("click", (event) => {
     }
 
     if (action === "close-project-setup") {
+        cancelVoiceComposer("projectSetup");
         actions.closeProjectSetup(state);
         render();
         return;
     }
 
     if (action === "restart-project-setup") {
+        cancelVoiceComposer("projectSetup");
         actions.restartProjectSetup(state);
         render();
         requestAnimationFrame(() => {
             (document.getElementById("projectSetupInput") as HTMLTextAreaElement | null)?.focus();
         });
+        return;
+    }
+
+    if (action === "toggle-project-setup-voice") {
+        void toggleVoiceRecording("projectSetup");
         return;
     }
 
@@ -1727,6 +2042,7 @@ document.addEventListener("click", (event) => {
     }
 
     if (action === "close-assistant") {
+        cancelVoiceComposer("assistant");
         state.assistantOpen = false;
         renderChrome();
         return;

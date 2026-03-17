@@ -10290,6 +10290,36 @@ function createStore() {
 }
 
 // src/views/assistant-view.ts
+function getVoiceButtonMarkup(status) {
+  if (status === "recording") {
+    return `
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <rect x="7" y="7" width="10" height="10" rx="2"></rect>
+            </svg>
+        `;
+  }
+  if (status === "transcribing") {
+    return `
+            <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.2" opacity="0.25"></circle>
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path>
+            </svg>
+        `;
+  }
+  return `
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V6a3 3 0 0 1 3-3"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+            <line x1="8" y1="22" x2="16" y2="22"></line>
+        </svg>
+    `;
+}
+function getVoiceStatusCopy(status) {
+  if (status === "recording") return "listening...";
+  if (status === "transcribing") return "transcribing voice note...";
+  return "";
+}
 function renderMessages({ messages, senderLabel, aiMessages }) {
   aiMessages.innerHTML = messages.map((message) => {
     if (message.sender === "user") {
@@ -10334,6 +10364,7 @@ function renderAssistantPanel({
   config,
   messages,
   assistantIcons: assistantIcons2,
+  voiceState,
   dom: dom2
 }) {
   dom2.assistantTitle.textContent = config.title;
@@ -10348,6 +10379,20 @@ function renderAssistantPanel({
         `
   ).join("");
   dom2.aiInput.placeholder = config.placeholder;
+  dom2.aiInput.disabled = voiceState.status === "transcribing";
+  dom2.assistantSendButton.disabled = voiceState.status === "transcribing";
+  dom2.assistantVoiceButton.disabled = voiceState.status === "transcribing";
+  dom2.assistantVoiceButton.setAttribute(
+    "aria-label",
+    voiceState.status === "recording" ? "stop voice recording" : "start voice recording"
+  );
+  dom2.assistantVoiceButton.setAttribute(
+    "aria-pressed",
+    voiceState.status === "recording" ? "true" : "false"
+  );
+  dom2.assistantVoiceButton.className = voiceState.status === "recording" ? "w-9 h-9 flex-shrink-0 rounded-full bg-red-500 text-white flex items-center justify-center transition-all shadow-sm mb-0.5 scale-105" : "w-9 h-9 flex-shrink-0 rounded-full border border-stone-200 bg-stone-50 text-stone-500 flex items-center justify-center transition-all hover:border-stone-400 hover:text-stone-900 mb-0.5 disabled:cursor-not-allowed disabled:opacity-60";
+  dom2.assistantVoiceButton.innerHTML = getVoiceButtonMarkup(voiceState.status);
+  dom2.assistantVoiceStatus.textContent = getVoiceStatusCopy(voiceState.status);
   renderMessages({
     messages,
     senderLabel: config.senderLabel,
@@ -10813,6 +10858,36 @@ var stepCopy = [
   "choose tasks or a routine",
   "review the actionable output"
 ];
+function renderVoiceButton(status) {
+  if (status === "recording") {
+    return `
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <rect x="7" y="7" width="10" height="10" rx="2"></rect>
+            </svg>
+        `;
+  }
+  if (status === "transcribing") {
+    return `
+            <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.2" opacity="0.25"></circle>
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path>
+            </svg>
+        `;
+  }
+  return `
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V6a3 3 0 0 1 3-3"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+            <line x1="8" y1="22" x2="16" y2="22"></line>
+        </svg>
+    `;
+}
+function getVoiceStatusCopy2(status, busy) {
+  if (status === "recording") return "listening...";
+  if (status === "transcribing") return "transcribing voice note...";
+  return busy ? "copilot is thinking" : "enter to send";
+}
 function renderSetupMessages(messages) {
   return messages.map((message, index) => {
     const isUser = message.sender === "user";
@@ -11203,7 +11278,9 @@ function renderSidebar(projectSetup) {
         </aside>
     `;
 }
-function renderComposer(projectSetup) {
+function renderComposer(projectSetup, voiceState, draftValue) {
+  const voiceBusy = voiceState.status === "transcribing";
+  const controlsDisabled = projectSetup.busy || voiceBusy;
   return `
         <div class="border-t border-stone-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
             <div class="mx-auto max-w-4xl">
@@ -11216,30 +11293,40 @@ function renderComposer(projectSetup) {
                     <textarea
                         id="projectSetupInput"
                         aria-label="describe the project"
-                        class="min-h-[56px] max-h-[180px] w-full resize-none bg-transparent px-4 py-3 pr-16 text-[15px] leading-relaxed text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        class="min-h-[56px] max-h-[180px] w-full resize-none bg-transparent px-4 py-3 pr-28 text-[15px] leading-relaxed text-stone-900 outline-none placeholder:text-stone-400 disabled:cursor-not-allowed disabled:opacity-60"
                         rows="1"
                         placeholder="describe the project, what is blocked, or what success looks like..."
-                        ${projectSetup.busy ? "disabled" : ""}
-                    ></textarea>
+                        ${voiceBusy ? "disabled" : ""}
+                    >${escapeHtml(draftValue || "")}</textarea>
+                    <button
+                        data-action="toggle-project-setup-voice"
+                        aria-label="${voiceState.status === "recording" ? "stop voice recording" : "start voice recording"}"
+                        aria-pressed="${voiceState.status === "recording" ? "true" : "false"}"
+                        class="absolute bottom-3 right-16 flex h-11 w-11 items-center justify-center rounded-full transition-all ${voiceState.status === "recording" ? "bg-red-500 text-white shadow-sm scale-[1.03]" : "border border-stone-200 bg-white text-stone-500 hover:border-stone-400 hover:text-stone-900"} disabled:cursor-not-allowed disabled:opacity-60"
+                        type="button"
+                        ${controlsDisabled ? "disabled" : ""}
+                    >
+                        ${renderVoiceButton(voiceState.status)}
+                    </button>
                     <button
                         data-action="send-project-setup"
                         aria-label="send project setup message"
                         class="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-stone-900 text-white shadow-sm transition-all hover:scale-[1.03] hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
-                        ${projectSetup.busy ? "disabled" : ""}
+                        ${controlsDisabled ? "disabled" : ""}
                     >
                         <svg class="w-4 h-4 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                     </button>
                 </div>
                 <div class="mt-3 flex items-center justify-between gap-4 px-1 text-[11px] font-medium lowercase tracking-[0.14em] text-stone-400">
-                    <span>${projectSetup.busy ? "copilot is thinking" : "enter to send"}</span>
+                    <span>${getVoiceStatusCopy2(voiceState.status, projectSetup.busy)}</span>
                     <span>shift + enter for a new line</span>
                 </div>
             </div>
         </div>
     `;
 }
-function renderProjectSetupView({ projectSetup, projectCount }) {
+function renderProjectSetupView({ projectSetup, projectCount, voiceState, draftValue }) {
   const hasProjects = projectCount > 0;
   return `
         <div class="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_right,_rgba(17,17,17,0.05),_transparent_26%),linear-gradient(180deg,_rgba(246,246,245,0.7)_0%,_rgba(255,255,255,1)_28%)]">
@@ -11305,7 +11392,7 @@ function renderProjectSetupView({ projectSetup, projectCount }) {
                                         </button>
                                     </div>
                                 </div>
-                              ` : renderComposer(projectSetup)}
+                              ` : renderComposer(projectSetup, voiceState, draftValue)}
                 </section>
 
                 ${renderSidebar(projectSetup)}
@@ -11612,6 +11699,7 @@ var AUTH_HINT_STORAGE_KEY = "precortex.authHint";
 var ASSISTANT_WIDTH_STORAGE_KEY = "precortex.assistantWidth";
 var DESKTOP_ASSISTANT_MIN_WIDTH = 340;
 var DESKTOP_ASSISTANT_MAX_WIDTH_RATIO = 0.45;
+var VOICE_TRANSCRIPTION_ERROR = "Could not transcribe the voice note.";
 var store = createStore();
 var state = store.state;
 var assistantConfigs = store.assistantConfigs;
@@ -11635,6 +11723,28 @@ var assistantResizeState = {
   pointerId: null
 };
 var preferredDesktopAssistantWidth = readStoredAssistantWidth();
+var composerDrafts = {
+  assistant: "",
+  projectSetup: ""
+};
+var voiceControllers = {
+  assistant: {
+    status: "idle",
+    mediaRecorder: null,
+    stream: null,
+    mimeType: "",
+    chunks: [],
+    sessionId: 0
+  },
+  projectSetup: {
+    status: "idle",
+    mediaRecorder: null,
+    stream: null,
+    mimeType: "",
+    chunks: [],
+    sessionId: 0
+  }
+};
 var dom = {
   authRoot: byId("authRoot"),
   appShell: byId("appShell"),
@@ -11646,6 +11756,7 @@ var dom = {
   assistantTitle: byId("assistantTitle"),
   assistantQuickActionsLabel: byId("assistantQuickActionsLabel"),
   assistantInputHint: byId("assistantInputHint"),
+  assistantVoiceStatus: byId("assistantVoiceStatus"),
   assistantResizeHandle: byId("assistantResizeHandle"),
   assistantPanel: byId("assistantPanel"),
   navInboxCount: byId("navInboxCount"),
@@ -11657,6 +11768,8 @@ var dom = {
   reopenAssistantButton: byId("reopenAssistantButton"),
   taskModal: byId("taskModal"),
   aiInput: byId("aiInput"),
+  assistantVoiceButton: byId("assistantVoiceButton"),
+  assistantSendButton: byId("assistantSendButton"),
   toastContainer: byId("toastContainer")
 };
 var destinationLabels = {
@@ -11666,6 +11779,48 @@ var destinationLabels = {
   later: "later"
 };
 var activeToastTimer = null;
+function getProjectSetupInput() {
+  return document.getElementById("projectSetupInput");
+}
+function supportsVoiceRecording() {
+  return Boolean(
+    navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined"
+  );
+}
+function getPreferredRecordingMimeType() {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return "";
+  }
+  return MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
+}
+function getComposerDraft(key) {
+  return composerDrafts[key];
+}
+function setComposerDraft(key, value) {
+  composerDrafts[key] = value;
+}
+function syncComposerDraftToDom(key) {
+  const input = key === "assistant" ? dom.aiInput : getProjectSetupInput();
+  if (!input) return;
+  if (input.value !== composerDrafts[key]) {
+    input.value = composerDrafts[key];
+  }
+  autoResize(input);
+}
+function focusComposer(key) {
+  const input = key === "assistant" ? dom.aiInput : getProjectSetupInput();
+  if (!input) return;
+  input.focus();
+  if ("setSelectionRange" in input) {
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+}
+function getVoiceStatus(key) {
+  return voiceControllers[key].status;
+}
+function setVoiceStatus(key, status) {
+  voiceControllers[key].status = status;
+}
 function readStoredAssistantWidth() {
   try {
     const raw = window.localStorage.getItem(ASSISTANT_WIDTH_STORAGE_KEY);
@@ -11822,8 +11977,11 @@ function renderMainView(suppressAnimation = false) {
   if (state.currentView === "project-setup") {
     dom.mainView.innerHTML = renderProjectSetupView({
       projectSetup: state.projectSetup,
-      projectCount: state.projects.length
+      projectCount: state.projects.length,
+      voiceState: { status: getVoiceStatus("projectSetup") },
+      draftValue: getComposerDraft("projectSetup")
     });
+    syncComposerDraftToDom("projectSetup");
     return;
   }
   if (state.currentView === "project") {
@@ -11902,8 +12060,10 @@ function updateAssistant() {
     config,
     messages: getCurrentAssistantMessages(state),
     assistantIcons,
+    voiceState: { status: getVoiceStatus("assistant") },
     dom
   });
+  syncComposerDraftToDom("assistant");
 }
 function scrollUpcomingTargetIntoView(dateIso) {
   const scrollArea = document.getElementById("upcomingScrollArea");
@@ -11931,6 +12091,15 @@ function renderChrome() {
   const hideAssistantSurface = state.currentView === "project-setup";
   const drawersOpen = mobile && (state.mobileNavOpen || state.assistantOpen && !hideAssistantSurface);
   const blockingSurfaceOpen = Boolean(getSelectedTask(state));
+  if (hideAssistantSurface && getVoiceStatus("assistant") !== "idle") {
+    cancelVoiceComposer("assistant");
+  }
+  if (state.currentView !== "project-setup" && getVoiceStatus("projectSetup") !== "idle") {
+    cancelVoiceComposer("projectSetup");
+  }
+  if (!state.assistantOpen && getVoiceStatus("assistant") !== "idle") {
+    cancelVoiceComposer("assistant");
+  }
   dom.mobileNav.classList.toggle("translate-x-0", mobile && state.mobileNavOpen);
   dom.mobileNav.classList.toggle("-translate-x-full", mobile && !state.mobileNavOpen);
   dom.mobileNav.classList.toggle("pointer-events-none", mobile && !state.mobileNavOpen);
@@ -11969,6 +12138,142 @@ function renderChrome() {
   dom.reopenAssistantButton.classList.toggle("translate-y-4", !showAssistantButton);
   dom.reopenAssistantButton.classList.toggle("scale-90", !showAssistantButton);
   dom.reopenAssistantButton.classList.toggle("pointer-events-none", !showAssistantButton);
+}
+function resetVoiceController(key) {
+  const controller = voiceControllers[key];
+  if (controller.stream) {
+    controller.stream.getTracks().forEach((track) => track.stop());
+  }
+  controller.mediaRecorder = null;
+  controller.stream = null;
+  controller.mimeType = "";
+  controller.chunks = [];
+}
+function refreshVoiceSurface(key) {
+  if (key === "assistant") {
+    updateAssistant();
+    return;
+  }
+  if (state.currentView === "project-setup") {
+    renderMainView(true);
+  }
+}
+function cancelVoiceComposer(key) {
+  const controller = voiceControllers[key];
+  controller.sessionId += 1;
+  const recorder = controller.mediaRecorder;
+  if (recorder && recorder.state !== "inactive") {
+    recorder.ondataavailable = null;
+    recorder.onstop = null;
+    recorder.onerror = null;
+    recorder.stop();
+  }
+  resetVoiceController(key);
+  setVoiceStatus(key, "idle");
+  refreshVoiceSurface(key);
+}
+async function transcribeVoiceBlob(key, blob, mimeType, sessionId) {
+  if (!convexClient) {
+    throw new Error("Voice transcription is unavailable right now.");
+  }
+  const audio = await blob.arrayBuffer();
+  const transcript = await convexClient.action(api.transcription.transcribeVoiceNote, {
+    audio,
+    mimeType
+  });
+  if (!transcript || typeof transcript.text !== "string") {
+    throw new Error("Voice transcription did not return any text.");
+  }
+  if (voiceControllers[key].sessionId !== sessionId) {
+    return;
+  }
+  setComposerDraft(key, transcript.text);
+  setVoiceStatus(key, "idle");
+  refreshVoiceSurface(key);
+  syncComposerDraftToDom(key);
+  focusComposer(key);
+}
+async function stopVoiceRecording(key) {
+  const controller = voiceControllers[key];
+  if (!controller.mediaRecorder || controller.mediaRecorder.state === "inactive") return;
+  const sessionId = controller.sessionId;
+  const recorder = controller.mediaRecorder;
+  setVoiceStatus(key, "transcribing");
+  refreshVoiceSurface(key);
+  await new Promise((resolve, reject) => {
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        controller.chunks.push(event.data);
+      }
+    };
+    recorder.onerror = () => {
+      reject(new Error("Voice recording failed."));
+    };
+    recorder.onstop = () => {
+      resolve();
+    };
+    recorder.stop();
+  });
+  const blob = new Blob(controller.chunks, {
+    type: controller.mimeType || recorder.mimeType || "audio/webm"
+  });
+  const mimeType = blob.type || controller.mimeType || "audio/webm";
+  resetVoiceController(key);
+  try {
+    await transcribeVoiceBlob(key, blob, mimeType, sessionId);
+  } catch (error) {
+    if (voiceControllers[key].sessionId !== sessionId) {
+      return;
+    }
+    setVoiceStatus(key, "idle");
+    refreshVoiceSurface(key);
+    const message = error instanceof Error ? error.message : VOICE_TRANSCRIPTION_ERROR;
+    showToast(message);
+  }
+}
+async function startVoiceRecording(key) {
+  if (!supportsVoiceRecording()) {
+    showToast("Voice recording is not supported in this browser.");
+    return;
+  }
+  if (!convexClient) {
+    showToast("Voice transcription is unavailable right now.");
+    return;
+  }
+  const otherKey = key === "assistant" ? "projectSetup" : "assistant";
+  if (getVoiceStatus(otherKey) !== "idle") {
+    cancelVoiceComposer(otherKey);
+  }
+  const controller = voiceControllers[key];
+  controller.sessionId += 1;
+  controller.chunks = [];
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = getPreferredRecordingMimeType();
+    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    controller.stream = stream;
+    controller.mediaRecorder = recorder;
+    controller.mimeType = recorder.mimeType || mimeType || "audio/webm";
+    setVoiceStatus(key, "recording");
+    refreshVoiceSurface(key);
+    recorder.start();
+  } catch (error) {
+    resetVoiceController(key);
+    setVoiceStatus(key, "idle");
+    refreshVoiceSurface(key);
+    const message = error instanceof DOMException && error.name === "NotAllowedError" ? "Microphone access was denied." : error instanceof DOMException && error.name === "NotFoundError" ? "No microphone was found." : "Could not start voice recording.";
+    showToast(message);
+  }
+}
+async function toggleVoiceRecording(key) {
+  if (getVoiceStatus(key) === "recording") {
+    await stopVoiceRecording(key);
+    return;
+  }
+  if (getVoiceStatus(key) === "transcribing") {
+    return;
+  }
+  await startVoiceRecording(key);
 }
 function endAssistantResize() {
   if (!assistantResizeState.active) return;
@@ -12080,6 +12385,8 @@ function closeConvexClient() {
   convexClient = null;
 }
 function resetAppState() {
+  cancelVoiceComposer("assistant");
+  cancelVoiceComposer("projectSetup");
   const freshStore = createStore();
   Object.assign(state, freshStore.state);
   assistantConfigs = freshStore.assistantConfigs;
@@ -12215,7 +12522,7 @@ function focusTaskCardTitle(taskId) {
 }
 function sendMessage(textOverride) {
   const view = state.currentView;
-  const text = (textOverride ?? dom.aiInput.value).trim();
+  const text = (textOverride ?? getComposerDraft("assistant") ?? dom.aiInput.value).trim();
   if (!text) return;
   if (view === "project") {
     const project = getSelectedProject(state);
@@ -12227,6 +12534,7 @@ function sendMessage(textOverride) {
     state.messagesByView[view].push({ sender: "user", text, rich: false, tasks: [] });
   }
   updateAssistant();
+  setComposerDraft("assistant", "");
   dom.aiInput.value = "";
   dom.aiInput.style.height = "auto";
   const typingIndicator = document.createElement("div");
@@ -12311,10 +12619,11 @@ async function maybeBootstrapProjectSetup() {
   await requestProjectCopilotReply();
 }
 async function sendProjectSetupMessage(textOverride) {
-  const input = document.getElementById("projectSetupInput");
+  const input = getProjectSetupInput();
   if (!input) return;
-  const text = (textOverride ?? input.value).trim();
+  const text = (textOverride ?? getComposerDraft("projectSetup") ?? input.value).trim();
   if (!text) return;
+  setComposerDraft("projectSetup", "");
   input.value = "";
   input.style.height = "auto";
   await requestProjectCopilotReply(text);
@@ -12607,7 +12916,13 @@ document.addEventListener("input", (event) => {
     updateModalSubtaskDraft(state, target.value);
     return;
   }
-  if (target.id === "aiInput" || target.id === "projectSetupInput") {
+  if (target.id === "aiInput") {
+    setComposerDraft("assistant", target.value);
+    autoResize(target);
+    return;
+  }
+  if (target.id === "projectSetupInput") {
+    setComposerDraft("projectSetup", target.value);
     autoResize(target);
     return;
   }
@@ -12929,7 +13244,12 @@ document.addEventListener("click", (event) => {
     sendMessage(suggestion);
     return;
   }
+  if (action === "toggle-assistant-voice") {
+    void toggleVoiceRecording("assistant");
+    return;
+  }
   if (action === "open-project-setup") {
+    cancelVoiceComposer("assistant");
     openProjectSetup(state);
     closeMobileChrome();
     render();
@@ -12939,16 +13259,22 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "close-project-setup") {
+    cancelVoiceComposer("projectSetup");
     closeProjectSetup(state);
     render();
     return;
   }
   if (action === "restart-project-setup") {
+    cancelVoiceComposer("projectSetup");
     restartProjectSetup(state);
     render();
     requestAnimationFrame(() => {
       document.getElementById("projectSetupInput")?.focus();
     });
+    return;
+  }
+  if (action === "toggle-project-setup-voice") {
+    void toggleVoiceRecording("projectSetup");
     return;
   }
   if (action === "send-project-setup") {
@@ -13010,6 +13336,7 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "close-assistant") {
+    cancelVoiceComposer("assistant");
     state.assistantOpen = false;
     renderChrome();
     return;

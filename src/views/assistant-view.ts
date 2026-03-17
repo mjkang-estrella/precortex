@@ -1,5 +1,39 @@
 import { escapeHtml } from "../utils/text.js";
 
+function getVoiceButtonMarkup(status) {
+    if (status === "recording") {
+        return `
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <rect x="7" y="7" width="10" height="10" rx="2"></rect>
+            </svg>
+        `;
+    }
+
+    if (status === "transcribing") {
+        return `
+            <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.2" opacity="0.25"></circle>
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path>
+            </svg>
+        `;
+    }
+
+    return `
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V6a3 3 0 0 1 3-3"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+            <line x1="8" y1="22" x2="16" y2="22"></line>
+        </svg>
+    `;
+}
+
+function getVoiceStatusCopy(status) {
+    if (status === "recording") return "listening...";
+    if (status === "transcribing") return "transcribing voice note...";
+    return "";
+}
+
 function renderMessages({ messages, senderLabel, aiMessages }) {
     aiMessages.innerHTML = messages
         .map((message) => {
@@ -58,6 +92,7 @@ export function renderAssistantPanel({
     config,
     messages,
     assistantIcons,
+    voiceState,
     dom,
 }) {
     dom.assistantTitle.textContent = config.title;
@@ -75,6 +110,23 @@ export function renderAssistantPanel({
         .join("");
 
     dom.aiInput.placeholder = config.placeholder;
+    dom.aiInput.disabled = voiceState.status === "transcribing";
+    dom.assistantSendButton.disabled = voiceState.status === "transcribing";
+    dom.assistantVoiceButton.disabled = voiceState.status === "transcribing";
+    dom.assistantVoiceButton.setAttribute(
+        "aria-label",
+        voiceState.status === "recording" ? "stop voice recording" : "start voice recording",
+    );
+    dom.assistantVoiceButton.setAttribute(
+        "aria-pressed",
+        voiceState.status === "recording" ? "true" : "false",
+    );
+    dom.assistantVoiceButton.className =
+        voiceState.status === "recording"
+            ? "w-9 h-9 flex-shrink-0 rounded-full bg-red-500 text-white flex items-center justify-center transition-all shadow-sm mb-0.5 scale-105"
+            : "w-9 h-9 flex-shrink-0 rounded-full border border-stone-200 bg-stone-50 text-stone-500 flex items-center justify-center transition-all hover:border-stone-400 hover:text-stone-900 mb-0.5 disabled:cursor-not-allowed disabled:opacity-60";
+    dom.assistantVoiceButton.innerHTML = getVoiceButtonMarkup(voiceState.status);
+    dom.assistantVoiceStatus.textContent = getVoiceStatusCopy(voiceState.status);
     renderMessages({
         messages,
         senderLabel: config.senderLabel,
