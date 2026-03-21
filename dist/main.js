@@ -9435,6 +9435,331 @@ var _systemSchema = defineSchema({
 var api = anyApi;
 var components = componentsGeneric();
 
+// src/utils/date.ts
+var DAY_MS = 24 * 60 * 60 * 1e3;
+function startOfLocalDay(value = /* @__PURE__ */ new Date()) {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+function parseLocalISODate(isoDate) {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+function toLocalISODate(value) {
+  const date = startOfLocalDay(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function addDays(value, days) {
+  const date = startOfLocalDay(value);
+  date.setDate(date.getDate() + days);
+  return date;
+}
+function diffInDays(dateA, dateB) {
+  return Math.round(
+    (startOfLocalDay(dateA).getTime() - startOfLocalDay(dateB).getTime()) / DAY_MS
+  );
+}
+function startOfWeekMonday(value) {
+  const date = startOfLocalDay(value);
+  const day = date.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  return addDays(date, offset);
+}
+function endOfWeekSunday(value) {
+  return addDays(startOfWeekMonday(value), 6);
+}
+var TODAY = startOfLocalDay(/* @__PURE__ */ new Date());
+var TODAY_ISO = toLocalISODate(TODAY);
+var formatters = {
+  weekdayShort: new Intl.DateTimeFormat(void 0, { weekday: "short" }),
+  weekdayLong: new Intl.DateTimeFormat(void 0, { weekday: "long" }),
+  monthDay: new Intl.DateTimeFormat(void 0, { month: "short", day: "numeric" }),
+  modalDate: new Intl.DateTimeFormat(void 0, {
+    weekday: "long",
+    month: "short",
+    day: "numeric"
+  })
+};
+
+// src/state/selectors.ts
+function getCreatedLabel(createdAt) {
+  if (!createdAt) return "added recently";
+  const diffMs = TODAY.getTime() - new Date(createdAt).getTime();
+  const hours = Math.round(diffMs / (60 * 60 * 1e3));
+  if (hours <= 0) return "added just now";
+  if (hours === 1) return "added 1 hour ago";
+  if (hours < 24) return `added ${hours} hours ago`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return "added yesterday";
+  if (days < 7) return `added ${days} days ago`;
+  return "added recently";
+}
+function decorateTask(state2, task) {
+  const project = task.projectId ? getProject(state2, task.projectId) : null;
+  return {
+    ...task,
+    projectName: project?.name || "inbox",
+    createdLabel: getCreatedLabel(task.createdAt)
+  };
+}
+function getInboxTasks(state2) {
+  return state2.tasks.filter((task) => task.status === "todo" && !task.dueAt && !task.projectId).map((task) => decorateTask(state2, task));
+}
+function getTask(state2, taskId) {
+  const task = state2.tasks.find((task2) => task2.id === taskId);
+  return task ? decorateTask(state2, task) : null;
+}
+function getSelectedTask(state2) {
+  return state2.modalTaskId ? getTask(state2, state2.modalTaskId) : null;
+}
+function getTaskDueMeta(task) {
+  if (!task.dueAt) {
+    return {
+      label: null,
+      longLabel: "unscheduled",
+      tone: "none",
+      diff: null,
+      date: null
+    };
+  }
+  const date = parseLocalISODate(task.dueAt);
+  const diff = diffInDays(date, TODAY);
+  let label = formatters.monthDay.format(date);
+  let longLabel = formatters.modalDate.format(date);
+  let tone = "upcoming";
+  if (diff === 0) {
+    label = "Today";
+    longLabel = "today";
+    tone = "today";
+  } else if (diff === 1) {
+    label = "Tomorrow";
+    longLabel = "tomorrow";
+  } else if (diff === -1) {
+    label = "Yesterday";
+    longLabel = "yesterday";
+    tone = "overdue";
+  } else if (diff < -1) {
+    tone = "overdue";
+  } else if (diff > 1 && diff <= 6) {
+    label = formatters.weekdayLong.format(date);
+  }
+  return { label, longLabel, tone, diff, date };
+}
+function getTodayTasks(state2) {
+  return state2.tasks.filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff <= 0).map((task) => decorateTask(state2, task));
+}
+function getCompletedTasks(state2) {
+  return [...state2.tasks].filter((task) => task.status === "completed").map((task) => decorateTask(state2, task));
+}
+function getInboxCount(state2) {
+  return getInboxTasks(state2).length;
+}
+function getFutureTodoTasks(state2) {
+  return state2.tasks.filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff > 0).map((task) => decorateTask(state2, task));
+}
+function getUpcomingSectionKey(date) {
+  const diff = diffInDays(date, TODAY);
+  if (diff === 1) return "tomorrow";
+  if (date <= endOfWeekSunday(TODAY)) return "this-week";
+  return "later";
+}
+function getUpcomingGroups(state2) {
+  const groups = {
+    tomorrow: [],
+    "this-week": [],
+    later: []
+  };
+  getFutureTodoTasks(state2).forEach((task) => {
+    groups[getUpcomingSectionKey(parseLocalISODate(task.dueAt))].push(task);
+  });
+  return groups;
+}
+function getWeekDays(state2, weekStartIso) {
+  const weekStart = parseLocalISODate(weekStartIso);
+  const futureTasks = getFutureTodoTasks(state2);
+  return Array.from({ length: 7 }, (_2, index) => {
+    const date = addDays(weekStart, index);
+    const iso = toLocalISODate(date);
+    return {
+      date,
+      iso,
+      hasTasks: futureTasks.some((task) => task.dueAt === iso),
+      isToday: iso === TODAY_ISO,
+      isSelected: iso === state2.selectedUpcomingDate
+    };
+  });
+}
+function getDateFromInboxDestination(destination) {
+  if (destination === "today") return TODAY_ISO;
+  if (destination === "tomorrow") return toLocalISODate(addDays(TODAY, 1));
+  if (destination === "next-week") return toLocalISODate(addDays(startOfWeekMonday(TODAY), 7));
+  return toLocalISODate(addDays(TODAY, 30));
+}
+function getProjects(state2) {
+  return [...state2.projects];
+}
+function getProject(state2, projectId) {
+  return state2.projects.find((project) => project.id === projectId) || null;
+}
+function getSelectedProject(state2) {
+  return state2.selectedProjectId ? getProject(state2, state2.selectedProjectId) : null;
+}
+function getProjectTasks(state2, projectId) {
+  return state2.tasks.filter((task) => task.projectId === projectId && task.status === "todo").map((task) => decorateTask(state2, task));
+}
+function getProjectCompletedTasks(state2, projectId) {
+  return state2.tasks.filter((task) => task.projectId === projectId && task.status === "completed").map((task) => decorateTask(state2, task));
+}
+function getCurrentAssistantMessages(state2) {
+  if (state2.currentView === "project") {
+    return state2.selectedProjectId ? state2.projectMessagesByProjectId[state2.selectedProjectId] || [] : [];
+  }
+  return state2.messagesByView[state2.currentView] || [];
+}
+
+// src/state/workspace-assistant.ts
+var PRIORITY_ORDER = {
+  high: 0,
+  medium: 1,
+  low: 2,
+  none: 3
+};
+function createId(prefix = "assistant") {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+function compareFocusTasks(left, right) {
+  const leftPriority = PRIORITY_ORDER[left.priority] ?? PRIORITY_ORDER.none;
+  const rightPriority = PRIORITY_ORDER[right.priority] ?? PRIORITY_ORDER.none;
+  if (leftPriority !== rightPriority) {
+    return leftPriority - rightPriority;
+  }
+  if (left.dueAt && right.dueAt) {
+    const dueCompare = parseLocalISODate(left.dueAt).getTime() - parseLocalISODate(right.dueAt).getTime();
+    if (dueCompare !== 0) return dueCompare;
+  } else if (left.dueAt) {
+    return -1;
+  } else if (right.dueAt) {
+    return 1;
+  }
+  return (left.updatedAt || 0) - (right.updatedAt || 0) || (left.createdAt || 0) - (right.createdAt || 0);
+}
+function findBestTask(tasks) {
+  return [...tasks].sort(compareFocusTasks)[0] || null;
+}
+function taskNeedsRefinement(task) {
+  return !String(task.description || "").trim() || !Array.isArray(task.subtasks) || task.subtasks.length === 0;
+}
+function createAssistantMessage(input) {
+  return {
+    id: input.id || createId("assistant-message"),
+    sender: input.sender,
+    text: input.text,
+    rich: Boolean(input.rich),
+    tasks: input.tasks || [],
+    summary: input.summary || null,
+    proposals: (input.proposals || []).map((proposal) => ({
+      ...proposal,
+      status: proposal.status || "pending"
+    }))
+  };
+}
+function isMutatingAssistantProposal(proposal) {
+  return proposal.kind !== "start_task";
+}
+function getAssistantFocusTask(state2) {
+  const tasks = state2.tasks.filter((task) => task.status === "todo");
+  if (state2.modalTaskId) {
+    const modalTask = tasks.find((task) => task.id === state2.modalTaskId);
+    if (modalTask) return modalTask;
+  }
+  if (state2.selectedProjectId) {
+    const projectTask = findBestTask(tasks.filter((task) => task.projectId === state2.selectedProjectId));
+    if (projectTask) return projectTask;
+  }
+  const overdueTask = findBestTask(tasks.filter((task) => getTaskDueMeta(task).tone === "overdue"));
+  if (overdueTask) return overdueTask;
+  const dueTodayTask = findBestTask(tasks.filter((task) => task.dueAt && getTaskDueMeta(task).diff === 0));
+  if (dueTodayTask) return dueTodayTask;
+  const inboxRefineTask = findBestTask(
+    tasks.filter((task) => !task.projectId && !task.dueAt && taskNeedsRefinement(task))
+  );
+  if (inboxRefineTask) return inboxRefineTask;
+  const nearestDueTask = findBestTask(tasks.filter((task) => task.dueAt));
+  if (nearestDueTask) return nearestDueTask;
+  return findBestTask(tasks);
+}
+function buildWorkspaceAssistantSummary(state2) {
+  const todoTasks = state2.tasks.filter((task) => task.status === "todo");
+  const overdueCount = todoTasks.filter((task) => getTaskDueMeta(task).tone === "overdue").length;
+  const dueTodayCount = todoTasks.filter((task) => task.dueAt && getTaskDueMeta(task).diff === 0).length;
+  const inboxCount = todoTasks.filter((task) => !task.projectId && !task.dueAt).length;
+  const focusTask = getAssistantFocusTask(state2);
+  let headline = "Workspace looks calm. Keep momentum on the next meaningful task.";
+  if (overdueCount > 0) {
+    headline = `${overdueCount} overdue ${overdueCount === 1 ? "task needs" : "tasks need"} attention.`;
+  } else if (dueTodayCount > 0) {
+    headline = `${dueTodayCount} ${dueTodayCount === 1 ? "task is" : "tasks are"} due today.`;
+  } else if (inboxCount > 0) {
+    headline = `${inboxCount} ${inboxCount === 1 ? "item is" : "items are"} waiting in inbox.`;
+  } else if (focusTask?.title) {
+    headline = `Best next focus: ${focusTask.title}.`;
+  }
+  return {
+    headline,
+    focusTaskId: focusTask?.id || null,
+    focusLabel: focusTask?.title || "",
+    overdueCount,
+    dueTodayCount,
+    inboxCount,
+    activeProjectCount: state2.projects.length
+  };
+}
+function buildWorkspaceAssistantRequest(state2) {
+  const todoTasks = state2.tasks.filter((task) => task.status === "todo");
+  const completedRecently = state2.tasks.filter(
+    (task) => task.status === "completed" && task.completedAt && TODAY.getTime() - task.completedAt <= 7 * DAY_MS
+  ).length;
+  return {
+    view: state2.currentView === "project" ? "project" : state2.currentView,
+    selectedProjectId: state2.selectedProjectId || null,
+    selectedTaskId: state2.modalTaskId || null,
+    workspace: {
+      projects: state2.projects.map((project) => ({
+        id: project.id,
+        name: project.name,
+        deadline: project.deadline || void 0,
+        summary: project.summary,
+        nextStep: project.nextStep
+      })),
+      tasks: todoTasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        description: task.description || "",
+        dueAt: task.dueAt || void 0,
+        priority: task.priority || "none",
+        projectId: task.projectId || void 0,
+        subtasks: task.subtasks || [],
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt
+      })),
+      counts: {
+        inbox: todoTasks.filter((task) => !task.projectId && !task.dueAt).length,
+        overdue: todoTasks.filter((task) => task.dueAt && diffInDays(parseLocalISODate(task.dueAt), TODAY) < 0).length,
+        dueToday: todoTasks.filter((task) => task.dueAt === TODAY_ISO).length,
+        upcoming: todoTasks.filter((task) => task.dueAt && diffInDays(parseLocalISODate(task.dueAt), TODAY) > 0).length,
+        completedRecently
+      }
+    }
+  };
+}
+
 // src/data/assistant.ts
 var assistantIcons = {
   calendar: '<svg class="w-4 h-4 text-stone-400 group-hover:text-stone-900 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
@@ -9508,28 +9833,28 @@ function createAssistantConfigs(initialInboxCount) {
 function createInitialMessages(assistantConfigs2) {
   return {
     inbox: [
-      {
+      createAssistantMessage({
         sender: "assistant",
         text: assistantConfigs2.inbox.initialMessage,
         rich: false,
         tasks: []
-      }
+      })
     ],
     today: [
-      {
+      createAssistantMessage({
         sender: "assistant",
         text: assistantConfigs2.today.initialMessage,
         rich: false,
         tasks: []
-      }
+      })
     ],
     upcoming: [
-      {
+      createAssistantMessage({
         sender: "assistant",
         text: assistantConfigs2.upcoming.initialMessage,
         rich: false,
         tasks: []
-      }
+      })
     ]
   };
 }
@@ -9551,56 +9876,6 @@ function getAppConfig() {
     auth0Audience: config.auth0Audience || void 0
   };
 }
-
-// src/utils/date.ts
-var DAY_MS = 24 * 60 * 60 * 1e3;
-function startOfLocalDay(value = /* @__PURE__ */ new Date()) {
-  const date = value instanceof Date ? new Date(value) : new Date(value);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-function parseLocalISODate(isoDate) {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
-function toLocalISODate(value) {
-  const date = startOfLocalDay(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-function addDays(value, days) {
-  const date = startOfLocalDay(value);
-  date.setDate(date.getDate() + days);
-  return date;
-}
-function diffInDays(dateA, dateB) {
-  return Math.round(
-    (startOfLocalDay(dateA).getTime() - startOfLocalDay(dateB).getTime()) / DAY_MS
-  );
-}
-function startOfWeekMonday(value) {
-  const date = startOfLocalDay(value);
-  const day = date.getDay();
-  const offset = day === 0 ? -6 : 1 - day;
-  return addDays(date, offset);
-}
-function endOfWeekSunday(value) {
-  return addDays(startOfWeekMonday(value), 6);
-}
-var TODAY = startOfLocalDay(/* @__PURE__ */ new Date());
-var TODAY_ISO = toLocalISODate(TODAY);
-var formatters = {
-  weekdayShort: new Intl.DateTimeFormat(void 0, { weekday: "short" }),
-  weekdayLong: new Intl.DateTimeFormat(void 0, { weekday: "long" }),
-  monthDay: new Intl.DateTimeFormat(void 0, { month: "short", day: "numeric" }),
-  modalDate: new Intl.DateTimeFormat(void 0, {
-    weekday: "long",
-    month: "short",
-    day: "numeric"
-  })
-};
 
 // src/state/project-bay.ts
 function cleanText(value) {
@@ -9951,312 +10226,6 @@ function removeProjectRoutineItem(state2, listKey, index) {
   state2.projectSetup = removeProjectSetupRoutineItem(state2.projectSetup, listKey, index);
 }
 
-// src/utils/text.ts
-function escapeHtml(value) {
-  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
-function ordinalLabel(index) {
-  const labels = ["1st", "2nd", "3rd", "4th", "5th"];
-  return labels[index] || `${index + 1}th`;
-}
-
-// src/state/selectors.ts
-function getCreatedLabel(createdAt) {
-  if (!createdAt) return "added recently";
-  const diffMs = TODAY.getTime() - new Date(createdAt).getTime();
-  const hours = Math.round(diffMs / (60 * 60 * 1e3));
-  if (hours <= 0) return "added just now";
-  if (hours === 1) return "added 1 hour ago";
-  if (hours < 24) return `added ${hours} hours ago`;
-  const days = Math.round(hours / 24);
-  if (days === 1) return "added yesterday";
-  if (days < 7) return `added ${days} days ago`;
-  return "added recently";
-}
-function decorateTask(state2, task) {
-  const project = task.projectId ? getProject(state2, task.projectId) : null;
-  return {
-    ...task,
-    projectName: project?.name || "inbox",
-    createdLabel: getCreatedLabel(task.createdAt)
-  };
-}
-function getInboxTasks(state2) {
-  return state2.tasks.filter((task) => task.status === "todo" && !task.dueAt && !task.projectId).map((task) => decorateTask(state2, task));
-}
-function getTask(state2, taskId) {
-  const task = state2.tasks.find((task2) => task2.id === taskId);
-  return task ? decorateTask(state2, task) : null;
-}
-function getSelectedTask(state2) {
-  return state2.modalTaskId ? getTask(state2, state2.modalTaskId) : null;
-}
-function getTaskDueMeta(task) {
-  if (!task.dueAt) {
-    return {
-      label: null,
-      longLabel: "unscheduled",
-      tone: "none",
-      diff: null,
-      date: null
-    };
-  }
-  const date = parseLocalISODate(task.dueAt);
-  const diff = diffInDays(date, TODAY);
-  let label = formatters.monthDay.format(date);
-  let longLabel = formatters.modalDate.format(date);
-  let tone = "upcoming";
-  if (diff === 0) {
-    label = "Today";
-    longLabel = "today";
-    tone = "today";
-  } else if (diff === 1) {
-    label = "Tomorrow";
-    longLabel = "tomorrow";
-  } else if (diff === -1) {
-    label = "Yesterday";
-    longLabel = "yesterday";
-    tone = "overdue";
-  } else if (diff < -1) {
-    tone = "overdue";
-  } else if (diff > 1 && diff <= 6) {
-    label = formatters.weekdayLong.format(date);
-  }
-  return { label, longLabel, tone, diff, date };
-}
-function getTodayTasks(state2) {
-  return state2.tasks.filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff <= 0).map((task) => decorateTask(state2, task));
-}
-function getCompletedTasks(state2) {
-  return [...state2.tasks].filter((task) => task.status === "completed").map((task) => decorateTask(state2, task));
-}
-function getInboxCount(state2) {
-  return getInboxTasks(state2).length;
-}
-function getFutureTodoTasks(state2) {
-  return state2.tasks.filter((task) => task.status === "todo" && task.dueAt && getTaskDueMeta(task).diff > 0).map((task) => decorateTask(state2, task));
-}
-function getUpcomingSectionKey(date) {
-  const diff = diffInDays(date, TODAY);
-  if (diff === 1) return "tomorrow";
-  if (date <= endOfWeekSunday(TODAY)) return "this-week";
-  return "later";
-}
-function getUpcomingGroups(state2) {
-  const groups = {
-    tomorrow: [],
-    "this-week": [],
-    later: []
-  };
-  getFutureTodoTasks(state2).forEach((task) => {
-    groups[getUpcomingSectionKey(parseLocalISODate(task.dueAt))].push(task);
-  });
-  return groups;
-}
-function getWeekDays(state2, weekStartIso) {
-  const weekStart = parseLocalISODate(weekStartIso);
-  const futureTasks = getFutureTodoTasks(state2);
-  return Array.from({ length: 7 }, (_2, index) => {
-    const date = addDays(weekStart, index);
-    const iso = toLocalISODate(date);
-    return {
-      date,
-      iso,
-      hasTasks: futureTasks.some((task) => task.dueAt === iso),
-      isToday: iso === TODAY_ISO,
-      isSelected: iso === state2.selectedUpcomingDate
-    };
-  });
-}
-function getDateFromInboxDestination(destination) {
-  if (destination === "today") return TODAY_ISO;
-  if (destination === "tomorrow") return toLocalISODate(addDays(TODAY, 1));
-  if (destination === "next-week") return toLocalISODate(addDays(startOfWeekMonday(TODAY), 7));
-  return toLocalISODate(addDays(TODAY, 30));
-}
-function getProjects(state2) {
-  return [...state2.projects];
-}
-function getProject(state2, projectId) {
-  return state2.projects.find((project) => project.id === projectId) || null;
-}
-function getSelectedProject(state2) {
-  return state2.selectedProjectId ? getProject(state2, state2.selectedProjectId) : null;
-}
-function getProjectTasks(state2, projectId) {
-  return state2.tasks.filter((task) => task.projectId === projectId && task.status === "todo").map((task) => decorateTask(state2, task));
-}
-function getProjectCompletedTasks(state2, projectId) {
-  return state2.tasks.filter((task) => task.projectId === projectId && task.status === "completed").map((task) => decorateTask(state2, task));
-}
-function getCurrentAssistantMessages(state2) {
-  if (state2.currentView === "project") {
-    return state2.selectedProjectId ? state2.projectMessagesByProjectId[state2.selectedProjectId] || [] : [];
-  }
-  return state2.messagesByView[state2.currentView] || [];
-}
-
-// src/state/assistant-replies.ts
-function buildTodayReply(text, state2, assistantConfigs2) {
-  const key = text.toLowerCase();
-  const todayTasks = getTodayTasks(state2);
-  if (key.includes("prioritize")) {
-    return {
-      text: "based on your tasks, here's how i'd order your day:",
-      tasks: todayTasks.slice(0, 3).map((task, index) => ({
-        order: ordinalLabel(index),
-        text: `${task.title} ${getTaskDueMeta(task).tone === "overdue" ? "\u2014 already overdue" : "\u2014 due today"}`
-      }))
-    };
-  }
-  if (key.includes("suggest")) {
-    return {
-      text: "looking at your projects, here are a few tasks you might want to add:",
-      tasks: [
-        { text: "Schedule follow-up after the agency pitch review" },
-        { text: "Share the Q3 content draft for feedback" },
-        { text: "Set a hard deadline for the brand voice update" }
-      ]
-    };
-  }
-  if (key.includes("break down")) {
-    const task = todayTasks[0];
-    return {
-      text: task ? `here's how to break down <strong>${escapeHtml(task.title)}</strong>:` : "there isn't an overdue task right now, so i'd break down the next due item instead:",
-      tasks: task ? [
-        { text: "Capture the core objective and deadline" },
-        { text: "List the 2 or 3 decisions blocking progress" },
-        { text: "Draft the first pass before editing for polish" },
-        { text: "Schedule a quick review checkpoint" }
-      ] : [
-        { text: "Pick the next due task" },
-        { text: "Write the first obvious substep" },
-        { text: "Set a 30-minute start block on the calendar" }
-      ]
-    };
-  }
-  return {
-    text: assistantConfigs2.today.defaultReply,
-    tasks: []
-  };
-}
-function buildInboxReply(text, state2, assistantConfigs2) {
-  const key = text.toLowerCase();
-  const inboxTasks = getInboxTasks(state2);
-  if (key.includes("batch")) {
-    return {
-      text: "i can auto-schedule these based on your habits. here's a proposal:",
-      tasks: inboxTasks.slice(0, 3).map((task, index) => ({
-        order: ["Today", "Tomorrow", "Next Week"][index] || "Later",
-        text: task.title
-      }))
-    };
-  }
-  if (key.includes("folder") || key.includes("suggest")) {
-    return {
-      text: "here are some suggested projects for these unsorted items:",
-      tasks: inboxTasks.slice(0, 3).map((task) => ({
-        order: task.tags[0] ? task.tags[0].label.replace(/\b\w/g, (char) => char.toUpperCase()) : "General",
-        text: task.title
-      }))
-    };
-  }
-  if (key.includes("summarize") || key.includes("missed")) {
-    return {
-      text: `you've got ${inboxTasks.length} items needing triage. two look like quick reviews, one feels like deeper planning work, and at least one has been sitting long enough to schedule today.`,
-      tasks: []
-    };
-  }
-  return {
-    text: assistantConfigs2.inbox.defaultReply,
-    tasks: []
-  };
-}
-function buildUpcomingReply(text, state2, assistantConfigs2) {
-  const key = text.toLowerCase();
-  const futureTasks = getFutureTodoTasks(state2);
-  const overdueTasks = getTodayTasks(state2).filter(
-    (task) => getTaskDueMeta(task).tone === "overdue"
-  );
-  if (key.includes("balance") || key.includes("workload")) {
-    return {
-      text: "here's a lighter way to spread the rest of your week:",
-      tasks: futureTasks.slice(0, 3).map((task, index) => ({
-        order: ordinalLabel(index),
-        text: `${task.title} \u2014 ${getTaskDueMeta(task).label}`
-      }))
-    };
-  }
-  if (key.includes("reschedule") || key.includes("overdue")) {
-    return overdueTasks.length ? {
-      text: "these overdue tasks should move first before the later work piles up:",
-      tasks: overdueTasks.map((task) => ({
-        text: `${task.title} \u2014 reschedule for the next open block`
-      }))
-    } : {
-      text: "good news: nothing is overdue right now. i'd keep the earliest upcoming work where it is.",
-      tasks: futureTasks.slice(0, 2).map((task) => ({ text: `${task.title} \u2014 ${getTaskDueMeta(task).label}` }))
-    };
-  }
-  return {
-    text: assistantConfigs2.upcoming.defaultReply,
-    tasks: []
-  };
-}
-function buildProjectReply(text, state2, assistantConfigs2) {
-  const key = text.toLowerCase();
-  const project = getProject(state2, state2.selectedProjectId);
-  const projectTasks = project ? getProjectTasks(state2, project.id) : [];
-  if (!project) {
-    return {
-      text: assistantConfigs2.project.defaultReply,
-      tasks: []
-    };
-  }
-  if (key.includes("next")) {
-    return {
-      text: `the best next move is still <strong>${escapeHtml(project.nextStep)}</strong>. after that, i'd keep momentum with these tasks:`,
-      tasks: projectTasks.slice(0, 3).map((task, index) => ({
-        order: ordinalLabel(index),
-        text: task.title
-      }))
-    };
-  }
-  if (key.includes("risk")) {
-    return {
-      text: "the plan looks fine structurally, but these are the spots i'd watch before execution speeds up:",
-      tasks: [
-        { text: "Scope creep if the outcome is not rechecked against the deadline" },
-        { text: "Decision debt if constraints stay implicit instead of written down" },
-        {
-          text: projectTasks[0] ? `Losing momentum if "${projectTasks[0].title}" does not start soon` : "No immediate task has been started yet"
-        }
-      ]
-    };
-  }
-  if (key.includes("break down")) {
-    return {
-      text: `here's how i'd break down <strong>${escapeHtml(project.nextStep)}</strong>:`,
-      tasks: [
-        { text: "Write the smallest possible first draft" },
-        { text: "List the open decisions and unknowns" },
-        { text: "Choose an owner or review checkpoint" },
-        { text: "Set the next concrete action right after the draft exists" }
-      ]
-    };
-  }
-  return {
-    text: `i'm keeping ${project.name} pointed at the deadline. ask for the next step, risks, or a breakdown of the immediate work.`,
-    tasks: []
-  };
-}
-function buildAssistantReply({ view, text, state: state2, assistantConfigs: assistantConfigs2 }) {
-  if (view === "project") return buildProjectReply(text, state2, assistantConfigs2);
-  if (view === "inbox") return buildInboxReply(text, state2, assistantConfigs2);
-  if (view === "upcoming") return buildUpcomingReply(text, state2, assistantConfigs2);
-  return buildTodayReply(text, state2, assistantConfigs2);
-}
-
 // src/state/store.ts
 function createStore() {
   const assistantConfigs2 = createAssistantConfigs(0);
@@ -10287,6 +10256,11 @@ function createStore() {
       }
     }
   };
+}
+
+// src/utils/text.ts
+function escapeHtml(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 // src/views/assistant-view.ts
@@ -10320,49 +10294,201 @@ function getVoiceStatusCopy(status) {
   if (status === "transcribing") return "transcribing voice note...";
   return "";
 }
-function renderMessages({ messages, senderLabel, aiMessages }) {
-  aiMessages.innerHTML = messages.map((message) => {
-    if (message.sender === "user") {
-      return `
-                    <div class="flex flex-col items-end max-w-[90%] self-end">
-                        <div class="text-[11px] font-semibold text-stone-500 mb-1.5 lowercase pr-1">you</div>
-                        <div class="bg-stone-900 text-white px-5 py-3.5 rounded-[20px] rounded-tr-[4px] text-[14px] leading-relaxed">
-                            ${escapeHtml(message.text)}
+function isMutatingProposal(proposal) {
+  return proposal.kind !== "start_task";
+}
+function renderSummaryCard(summary) {
+  if (!summary) return "";
+  return `
+        <section class="rounded-[26px] border border-stone-200/80 bg-white px-4 py-4 shadow-sm">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">workspace brief</div>
+            <div class="mt-2 text-[14px] leading-relaxed text-stone-800 lowercase">${escapeHtml(summary.headline)}</div>
+            ${summary.focusLabel ? `
+                        <div class="mt-3 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-[12px] font-medium text-stone-700 lowercase">
+                            <span class="w-1.5 h-1.5 rounded-full bg-stone-900"></span>
+                            focus: ${escapeHtml(summary.focusLabel)}
                         </div>
-                    </div>
-                `;
-    }
-    const body = message.rich ? `
-                    <div class="lowercase mb-3">${escapeHtml(message.text)}</div>
-                    <div class="flex flex-col gap-2 mt-3">
-                        ${message.tasks.map(
-      (task) => `
-                            <div class="bg-white border border-stone-200/80 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-sm">
-                                <span class="text-[13px] text-stone-700 font-medium">
-                                    ${task.order ? `<span class="text-stone-900 font-semibold">${escapeHtml(task.order)}</span> \u2014 ` : ""}${escapeHtml(task.text)}
-                                </span>
-                                <div class="w-7 h-7 rounded-full bg-stone-50 flex items-center justify-center flex-shrink-0 text-stone-400 border border-stone-200/50">
-                                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                                </div>
+                    ` : ""}
+            <div class="mt-4 grid grid-cols-2 gap-2">
+                <div class="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3">
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400">overdue</div>
+                    <div class="mt-1 text-[18px] font-semibold text-stone-900">${summary.overdueCount}</div>
+                </div>
+                <div class="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3">
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400">due today</div>
+                    <div class="mt-1 text-[18px] font-semibold text-stone-900">${summary.dueTodayCount}</div>
+                </div>
+                <div class="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3">
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400">inbox</div>
+                    <div class="mt-1 text-[18px] font-semibold text-stone-900">${summary.inboxCount}</div>
+                </div>
+                <div class="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3">
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400">projects</div>
+                    <div class="mt-1 text-[18px] font-semibold text-stone-900">${summary.activeProjectCount}</div>
+                </div>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-2">
+                <button data-action="assistant-suggestion" data-suggestion="status brief" class="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[12px] font-medium text-stone-700 lowercase hover:border-stone-400 hover:text-stone-900 transition-colors" type="button">status brief</button>
+                <button data-action="assistant-suggestion" data-suggestion="refine this task" class="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[12px] font-medium text-stone-700 lowercase hover:border-stone-400 hover:text-stone-900 transition-colors" type="button">refine this task</button>
+                <button data-action="assistant-suggestion" data-suggestion="help me start" class="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[12px] font-medium text-stone-700 lowercase hover:border-stone-400 hover:text-stone-900 transition-colors" type="button">help me start</button>
+            </div>
+        </section>
+    `;
+}
+function renderProposalDetails(proposal, context) {
+  const task = context.taskMap.get(proposal.taskId);
+  const project = proposal.kind === "project_move" && proposal.projectId ? context.projectMap.get(proposal.projectId) : null;
+  if (proposal.kind === "task_refine") {
+    return `
+            <div class="flex flex-col gap-2">
+                <div><span class="font-semibold text-stone-900">title</span> ${escapeHtml(proposal.title)}</div>
+                <div><span class="font-semibold text-stone-900">description</span> ${escapeHtml(proposal.description || "no description")}</div>
+            </div>
+        `;
+  }
+  if (proposal.kind === "schedule_change") {
+    return `
+            <div class="flex flex-col gap-2">
+                <div><span class="font-semibold text-stone-900">due</span> ${escapeHtml(proposal.dueAt || "unscheduled")}</div>
+                <div><span class="font-semibold text-stone-900">priority</span> ${escapeHtml(proposal.priority)}</div>
+            </div>
+        `;
+  }
+  if (proposal.kind === "project_move") {
+    return `<div><span class="font-semibold text-stone-900">destination</span> ${escapeHtml(project?.name || "inbox")}</div>`;
+  }
+  if (proposal.kind === "starter_subtasks") {
+    return `
+            <div class="flex flex-col gap-2">
+                ${proposal.subtasks.map(
+      (subtask, index) => `
+                            <div class="rounded-xl border border-stone-200 bg-white px-3 py-2">
+                                <span class="font-semibold text-stone-900">${index + 1}.</span> ${escapeHtml(subtask)}
                             </div>
                         `
     ).join("")}
-                    </div>
-                ` : `<div class="lowercase">${message.text}</div>`;
-    return `
-                <div class="flex flex-col items-start max-w-[95%]">
-                    <div class="text-[11px] font-semibold text-stone-500 mb-1.5 lowercase pl-1">${escapeHtml(senderLabel)}</div>
-                    <div class="bg-stone-100 text-stone-800 px-5 py-4 rounded-3xl rounded-tl-[4px] text-[14px] leading-relaxed border border-stone-200/50 w-full">
-                        ${body}
-                    </div>
+            </div>
+        `;
+  }
+  return `
+        <div class="flex flex-col gap-2">
+            <div>${escapeHtml(proposal.brief)}</div>
+            <div class="flex flex-col gap-2">
+                ${proposal.firstSteps.map(
+    (step, index) => `
+                            <div class="rounded-xl border border-stone-200 bg-white px-3 py-2">
+                                <span class="font-semibold text-stone-900">${index + 1}.</span> ${escapeHtml(step)}
+                            </div>
+                        `
+  ).join("")}
+            </div>
+            <div class="text-[12px] text-stone-500 lowercase">timebox: ${proposal.timeboxMinutes} minutes</div>
+        </div>
+    `;
+}
+function renderProposalCard(message, proposal, context) {
+  if (proposal.status === "dismissed") return "";
+  const task = context.taskMap.get(proposal.taskId);
+  const targetLabel = task?.title || "task";
+  const applied = proposal.status === "applied";
+  return `
+        <div class="rounded-[22px] border ${applied ? "border-emerald-200 bg-emerald-50/70" : "border-stone-200 bg-stone-50"} px-4 py-4">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500">${escapeHtml(proposal.kind.replace(/_/g, " "))}</div>
+                    <div class="mt-1 text-[14px] font-semibold text-stone-900">${escapeHtml(targetLabel)}</div>
                 </div>
-            `;
-  }).join("");
+                ${applied ? '<span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">applied</span>' : ""}
+            </div>
+            <div class="mt-3 text-[13px] leading-relaxed text-stone-700">${renderProposalDetails(proposal, context)}</div>
+            <div class="mt-3 text-[12px] leading-relaxed text-stone-500 lowercase">${escapeHtml(proposal.reason)}</div>
+            ${applied ? "" : `
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            ${isMutatingProposal(proposal) ? `
+                                        <button data-action="assistant-apply-proposal" data-message-id="${message.id}" data-proposal-id="${proposal.id}" class="rounded-full bg-stone-900 px-3 py-1.5 text-[12px] font-medium text-white lowercase hover:bg-stone-700 transition-colors" type="button">
+                                            apply
+                                        </button>
+                                    ` : ""}
+                            <button data-action="assistant-dismiss-proposal" data-message-id="${message.id}" data-proposal-id="${proposal.id}" class="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[12px] font-medium text-stone-700 lowercase hover:border-stone-400 hover:text-stone-900 transition-colors" type="button">
+                                dismiss
+                            </button>
+                        </div>
+                    `}
+        </div>
+    `;
+}
+function renderMessages({ messages, senderLabel, aiMessages, summary, tasks, projects }) {
+  const context = {
+    taskMap: new Map((tasks || []).map((task) => [task.id, task])),
+    projectMap: new Map((projects || []).map((project) => [project.id, project]))
+  };
+  aiMessages.innerHTML = `
+        <div class="flex flex-col gap-4">
+            ${renderSummaryCard(summary)}
+            ${messages.map((message) => {
+    if (message.sender === "user") {
+      return `
+                            <div class="flex flex-col items-end max-w-[90%] self-end">
+                                <div class="text-[11px] font-semibold text-stone-500 mb-1.5 lowercase pr-1">you</div>
+                                <div class="bg-stone-900 text-white px-5 py-3.5 rounded-[20px] rounded-tr-[4px] text-[14px] leading-relaxed">
+                                    ${escapeHtml(message.text)}
+                                </div>
+                            </div>
+                        `;
+    }
+    const visibleProposals = (message.proposals || []).filter((proposal) => proposal.status !== "dismissed");
+    const pendingMutatingProposals = visibleProposals.filter(
+      (proposal) => proposal.status !== "applied" && isMutatingProposal(proposal)
+    );
+    const body = message.rich ? `
+                            <div class="lowercase mb-3">${escapeHtml(message.text)}</div>
+                            <div class="flex flex-col gap-2 mt-3">
+                                ${message.tasks.map(
+      (task) => `
+                                            <div class="bg-white border border-stone-200/80 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-sm">
+                                                <span class="text-[13px] text-stone-700 font-medium">
+                                                    ${task.order ? `<span class="text-stone-900 font-semibold">${escapeHtml(task.order)}</span> \u2014 ` : ""}${escapeHtml(task.text)}
+                                                </span>
+                                                <div class="w-7 h-7 rounded-full bg-stone-50 flex items-center justify-center flex-shrink-0 text-stone-400 border border-stone-200/50">
+                                                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                                </div>
+                                            </div>
+                                        `
+    ).join("")}
+                            </div>
+                        ` : `<div class="lowercase">${escapeHtml(message.text)}</div>`;
+    return `
+                        <div class="flex flex-col items-start max-w-[95%]">
+                            <div class="text-[11px] font-semibold text-stone-500 mb-1.5 lowercase pl-1">${escapeHtml(senderLabel)}</div>
+                            <div class="bg-stone-100 text-stone-800 px-5 py-4 rounded-3xl rounded-tl-[4px] text-[14px] leading-relaxed border border-stone-200/50 w-full">
+                                ${message.summary?.headline ? `<div class="mb-3 inline-flex items-center rounded-full bg-white px-3 py-1 text-[11px] font-medium text-stone-600 lowercase border border-stone-200">${escapeHtml(message.summary.headline)}</div>` : ""}
+                                ${body}
+                                ${visibleProposals.length ? `
+                                            <div class="mt-4 flex flex-col gap-3">
+                                                ${pendingMutatingProposals.length > 1 ? `
+                                                            <div class="flex justify-end">
+                                                                <button data-action="assistant-apply-all-proposals" data-message-id="${message.id}" class="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-[12px] font-medium text-stone-700 lowercase hover:border-stone-500 hover:text-stone-900 transition-colors" type="button">
+                                                                    apply all drafts
+                                                                </button>
+                                                            </div>
+                                                        ` : ""}
+                                                ${visibleProposals.map((proposal) => renderProposalCard(message, proposal, context)).join("")}
+                                            </div>
+                                        ` : ""}
+                            </div>
+                        </div>
+                    `;
+  }).join("")}
+        </div>
+    `;
   aiMessages.scrollTop = aiMessages.scrollHeight;
 }
 function renderAssistantPanel({
   config,
   messages,
+  summary,
+  tasks,
+  projects,
   assistantIcons: assistantIcons2,
   voiceState,
   dom: dom2
@@ -10396,7 +10522,10 @@ function renderAssistantPanel({
   renderMessages({
     messages,
     senderLabel: config.senderLabel,
-    aiMessages: dom2.aiMessages
+    aiMessages: dom2.aiMessages,
+    summary,
+    tasks,
+    projects
   });
 }
 
@@ -12042,12 +12171,12 @@ function refreshAssistantConfigs() {
 }
 function createProjectBayMessages(project) {
   return [
-    {
+    createAssistantMessage({
       sender: "assistant",
       text: `i'm tracking ${project.name}. the clearest next move is still: ${project.nextStep.toLowerCase()}.`,
       rich: false,
       tasks: []
-    }
+    })
   ];
 }
 function maybeAutoOpenProjectSetup(projectCount, previousProjectCount = 0) {
@@ -12080,6 +12209,33 @@ function syncTasks(tasks) {
     cancelTaskCardEdit(state);
   }
   refreshAssistantConfigs();
+}
+function getAssistantThread(view = state.currentView, projectId = state.selectedProjectId) {
+  if (view === "project") {
+    if (!projectId) return null;
+    if (!state.projectMessagesByProjectId[projectId]) {
+      const project = state.projects.find((candidate) => candidate.id === projectId);
+      if (!project) return null;
+      state.projectMessagesByProjectId[projectId] = createProjectBayMessages(project);
+    }
+    return state.projectMessagesByProjectId[projectId];
+  }
+  if (!state.messagesByView[view]) {
+    state.messagesByView[view] = [];
+  }
+  return state.messagesByView[view];
+}
+function getAssistantConversation(view = state.currentView, projectId = state.selectedProjectId) {
+  const thread = getAssistantThread(view, projectId) || [];
+  return thread.map((message) => ({
+    sender: message.sender,
+    text: message.text
+  }));
+}
+function findVisibleAssistantMessage(messageId) {
+  const thread = getAssistantThread();
+  if (!thread) return null;
+  return thread.find((message) => message.id === messageId) || null;
 }
 function readStoredAuthHint() {
   try {
@@ -12248,6 +12404,9 @@ function updateAssistant() {
   renderAssistantPanel({
     config,
     messages: getCurrentAssistantMessages(state),
+    summary: buildWorkspaceAssistantSummary(state),
+    tasks: state.tasks,
+    projects: state.projects,
     assistantIcons,
     voiceState: { status: getVoiceStatus("assistant") },
     dom
@@ -12709,19 +12868,21 @@ function focusTaskCardTitle(taskId) {
     }
   });
 }
-function sendMessage(textOverride) {
-  const view = state.currentView;
+async function sendMessage(textOverride) {
+  const view = state.currentView === "project" ? "project" : state.currentView;
+  const projectId = view === "project" ? state.selectedProjectId : null;
   const text = (textOverride ?? getComposerDraft("assistant") ?? dom.aiInput.value).trim();
   if (!text) return;
-  if (view === "project") {
-    const project = getSelectedProject(state);
-    if (!project) return;
-    const messages = state.projectMessagesByProjectId[project.id] || createProjectBayMessages(project);
-    messages.push({ sender: "user", text, rich: false, tasks: [] });
-    state.projectMessagesByProjectId[project.id] = messages;
-  } else {
-    state.messagesByView[view].push({ sender: "user", text, rich: false, tasks: [] });
-  }
+  const thread = getAssistantThread(view, projectId);
+  if (!thread) return;
+  thread.push(
+    createAssistantMessage({
+      sender: "user",
+      text,
+      rich: false,
+      tasks: []
+    })
+  );
   updateAssistant();
   setComposerDraft("assistant", "");
   dom.aiInput.value = "";
@@ -12740,21 +12901,43 @@ function sendMessage(textOverride) {
     `;
   dom.aiMessages.appendChild(typingIndicator);
   dom.aiMessages.scrollTop = dom.aiMessages.scrollHeight;
-  const reply = buildAssistantReply({ view, text, state, assistantConfigs });
-  setTimeout(() => {
-    typingIndicator.remove();
-    const targetMessages = view === "project" ? state.selectedProjectId ? state.projectMessagesByProjectId[state.selectedProjectId] : null : state.messagesByView[view];
-    if (!targetMessages) return;
-    targetMessages.push({
-      sender: "assistant",
-      text: reply.text,
-      tasks: reply.tasks,
-      rich: reply.tasks.length > 0
-    });
-    if (state.currentView === view) {
-      updateAssistant();
-    }
-  }, 500);
+  const request = buildWorkspaceAssistantRequest(state);
+  const reply = await runAction(
+    api.workspaceAssistant.reply,
+    {
+      ...request,
+      message: text,
+      conversation: getAssistantConversation(view, projectId)
+    },
+    "Could not reach the assistant."
+  );
+  typingIndicator.remove();
+  const targetThread = getAssistantThread(view, projectId);
+  if (!targetThread) return;
+  if (reply === null) {
+    targetThread.push(
+      createAssistantMessage({
+        sender: "assistant",
+        text: "the workspace assistant is unavailable right now. try again in a moment.",
+        rich: false,
+        tasks: []
+      })
+    );
+  } else {
+    targetThread.push(
+      createAssistantMessage({
+        sender: "assistant",
+        text: reply.assistantMessage,
+        rich: false,
+        tasks: [],
+        summary: reply.summary,
+        proposals: reply.proposals
+      })
+    );
+  }
+  if (state.currentView === view && (view !== "project" || state.selectedProjectId === projectId)) {
+    updateAssistant();
+  }
 }
 async function runMutation(mutation, args, fallbackMessage = "Could not save change.") {
   if (!convexClient) return null;
@@ -12774,6 +12957,91 @@ async function runAction(action, args, fallbackMessage = "Could not complete act
     console.error(error);
     showToast(fallbackMessage);
     return null;
+  }
+}
+function updateProposalStatus(messageId, proposalId, status) {
+  const message = findVisibleAssistantMessage(messageId);
+  if (!message?.proposals) return null;
+  const proposal = message.proposals.find((candidate) => candidate.id === proposalId);
+  if (!proposal) return null;
+  proposal.status = status;
+  return proposal;
+}
+async function applyAssistantProposal(messageId, proposalId) {
+  const message = findVisibleAssistantMessage(messageId);
+  const proposal = message?.proposals?.find((candidate) => candidate.id === proposalId);
+  if (!proposal || proposal.status === "applied" || !isMutatingAssistantProposal(proposal)) {
+    return false;
+  }
+  let result = null;
+  if (proposal.kind === "task_refine") {
+    result = await runMutation(
+      api.tasks.update,
+      {
+        taskId: proposal.taskId,
+        title: proposal.title,
+        description: proposal.description
+      },
+      "Could not apply task refinement."
+    );
+  } else if (proposal.kind === "schedule_change") {
+    result = await runMutation(
+      api.tasks.update,
+      {
+        taskId: proposal.taskId,
+        dueAt: proposal.dueAt,
+        priority: proposal.priority
+      },
+      "Could not apply schedule draft."
+    );
+  } else if (proposal.kind === "project_move") {
+    result = await runMutation(
+      api.tasks.update,
+      {
+        taskId: proposal.taskId,
+        projectId: proposal.projectId
+      },
+      "Could not move task."
+    );
+  } else if (proposal.kind === "starter_subtasks") {
+    let successCount = 0;
+    for (const subtaskTitle of proposal.subtasks) {
+      const addResult = await runMutation(
+        api.tasks.addSubtask,
+        {
+          taskId: proposal.taskId,
+          title: subtaskTitle
+        },
+        "Could not add starter subtasks."
+      );
+      if (addResult === null) {
+        result = null;
+        break;
+      }
+      successCount += 1;
+      result = addResult;
+    }
+    if (successCount !== proposal.subtasks.length) {
+      return false;
+    }
+  }
+  if (result === null) return false;
+  updateProposalStatus(messageId, proposalId, "applied");
+  updateAssistant();
+  return true;
+}
+async function applyAllAssistantProposals(messageId) {
+  const message = findVisibleAssistantMessage(messageId);
+  if (!message?.proposals?.length) return;
+  let appliedCount = 0;
+  for (const proposal of message.proposals) {
+    if (proposal.status === "applied" || !isMutatingAssistantProposal(proposal)) continue;
+    if (await applyAssistantProposal(messageId, proposal.id)) {
+      appliedCount += 1;
+    }
+  }
+  if (appliedCount > 0) {
+    showToast(appliedCount === 1 ? "applied 1 draft" : `applied ${appliedCount} drafts`);
   }
 }
 function getProjectSetupConversation() {
@@ -13073,7 +13341,7 @@ document.addEventListener("keydown", (event) => {
   }
   if (target?.id === "aiInput" && event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
-    sendMessage();
+    void sendMessage();
   }
   if (target?.id === "projectSetupInput" && event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -13435,7 +13703,24 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "assistant-suggestion") {
-    sendMessage(suggestion);
+    void sendMessage(suggestion);
+    return;
+  }
+  if (action === "assistant-apply-proposal") {
+    void applyAssistantProposal(actionElement.dataset.messageId, actionElement.dataset.proposalId).then((didApply) => {
+      if (didApply) {
+        showToast("applied draft");
+      }
+    });
+    return;
+  }
+  if (action === "assistant-apply-all-proposals") {
+    void applyAllAssistantProposals(actionElement.dataset.messageId);
+    return;
+  }
+  if (action === "assistant-dismiss-proposal") {
+    updateProposalStatus(actionElement.dataset.messageId, actionElement.dataset.proposalId, "dismissed");
+    updateAssistant();
     return;
   }
   if (action === "toggle-assistant-voice") {
@@ -13526,7 +13811,7 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "send-message") {
-    sendMessage();
+    void sendMessage();
     return;
   }
   if (action === "close-assistant") {

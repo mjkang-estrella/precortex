@@ -6,7 +6,12 @@ import { assistantIcons } from "./data/assistant.js";
 import { getAppConfig } from "./config.js";
 import * as actions from "./state/actions.js";
 import { getProjectSetupSelectedMode } from "./state/project-bay.js";
-import { buildAssistantReply } from "./state/assistant-replies.js";
+import {
+    buildWorkspaceAssistantRequest,
+    buildWorkspaceAssistantSummary,
+    createAssistantMessage,
+    isMutatingAssistantProposal,
+} from "./state/workspace-assistant.js";
 import {
     getCompletedTasks,
     getDateFromInboxDestination,
@@ -236,12 +241,12 @@ function refreshAssistantConfigs() {
 
 function createProjectBayMessages(project) {
     return [
-        {
+        createAssistantMessage({
             sender: "assistant",
             text: `i'm tracking ${project.name}. the clearest next move is still: ${project.nextStep.toLowerCase()}.`,
             rich: false,
             tasks: [],
-        },
+        }),
     ];
 }
 
@@ -293,6 +298,41 @@ function syncTasks(tasks) {
     }
 
     refreshAssistantConfigs();
+}
+
+function getAssistantThread(view = state.currentView, projectId = state.selectedProjectId) {
+    if (view === "project") {
+        if (!projectId) return null;
+
+        if (!state.projectMessagesByProjectId[projectId]) {
+            const project = state.projects.find((candidate) => candidate.id === projectId);
+            if (!project) return null;
+            state.projectMessagesByProjectId[projectId] = createProjectBayMessages(project);
+        }
+
+        return state.projectMessagesByProjectId[projectId];
+    }
+
+    if (!state.messagesByView[view]) {
+        state.messagesByView[view] = [];
+    }
+
+    return state.messagesByView[view];
+}
+
+function getAssistantConversation(view = state.currentView, projectId = state.selectedProjectId) {
+    const thread = getAssistantThread(view, projectId) || [];
+    return thread.map((message) => ({
+        sender: message.sender,
+        text: message.text,
+    }));
+}
+
+function findVisibleAssistantMessage(messageId: string) {
+    const thread = getAssistantThread();
+    if (!thread) return null;
+
+    return thread.find((message) => message.id === messageId) || null;
 }
 
 function readStoredAuthHint() {
@@ -490,6 +530,9 @@ function updateAssistant() {
     renderAssistantPanel({
         config,
         messages: getCurrentAssistantMessages(state),
+        summary: buildWorkspaceAssistantSummary(state),
+        tasks: state.tasks,
+        projects: state.projects,
         assistantIcons,
         voiceState: { status: getVoiceStatus("assistant") },
         dom,
@@ -1061,20 +1104,23 @@ function focusTaskCardTitle(taskId) {
     });
 }
 
-function sendMessage(textOverride?: string) {
-    const view = state.currentView;
+async function sendMessage(textOverride?: string) {
+    const view = state.currentView === "project" ? "project" : state.currentView;
+    const projectId = view === "project" ? state.selectedProjectId : null;
     const text = (textOverride ?? getComposerDraft("assistant") ?? dom.aiInput.value).trim();
     if (!text) return;
 
-    if (view === "project") {
-        const project = getSelectedProject(state);
-        if (!project) return;
-        const messages = state.projectMessagesByProjectId[project.id] || createProjectBayMessages(project);
-        messages.push({ sender: "user", text, rich: false, tasks: [] });
-        state.projectMessagesByProjectId[project.id] = messages;
-    } else {
-        state.messagesByView[view].push({ sender: "user", text, rich: false, tasks: [] });
-    }
+    const thread = getAssistantThread(view, projectId);
+    if (!thread) return;
+
+    thread.push(
+        createAssistantMessage({
+            sender: "user",
+            text,
+            rich: false,
+            tasks: [],
+        }),
+    );
     updateAssistant();
 
     setComposerDraft("assistant", "");
@@ -1096,27 +1142,47 @@ function sendMessage(textOverride?: string) {
     dom.aiMessages.appendChild(typingIndicator);
     dom.aiMessages.scrollTop = dom.aiMessages.scrollHeight;
 
-    const reply = buildAssistantReply({ view, text, state, assistantConfigs });
-    setTimeout(() => {
-        typingIndicator.remove();
-        const targetMessages =
-            view === "project"
-                ? state.selectedProjectId
-                    ? state.projectMessagesByProjectId[state.selectedProjectId]
-                    : null
-                : state.messagesByView[view];
-        if (!targetMessages) return;
+    const request = buildWorkspaceAssistantRequest(state);
+    const reply = await runAction(
+        api.workspaceAssistant.reply,
+        {
+            ...request,
+            message: text,
+            conversation: getAssistantConversation(view, projectId),
+        },
+        "Could not reach the assistant.",
+    );
 
-        targetMessages.push({
-            sender: "assistant",
-            text: reply.text,
-            tasks: reply.tasks,
-            rich: reply.tasks.length > 0,
-        });
-        if (state.currentView === view) {
-            updateAssistant();
-        }
-    }, 500);
+    typingIndicator.remove();
+
+    const targetThread = getAssistantThread(view, projectId);
+    if (!targetThread) return;
+
+    if (reply === null) {
+        targetThread.push(
+            createAssistantMessage({
+                sender: "assistant",
+                text: "the workspace assistant is unavailable right now. try again in a moment.",
+                rich: false,
+                tasks: [],
+            }),
+        );
+    } else {
+        targetThread.push(
+            createAssistantMessage({
+                sender: "assistant",
+                text: reply.assistantMessage,
+                rich: false,
+                tasks: [],
+                summary: reply.summary,
+                proposals: reply.proposals,
+            }),
+        );
+    }
+
+    if (state.currentView === view && (view !== "project" || state.selectedProjectId === projectId)) {
+        updateAssistant();
+    }
 }
 
 async function runMutation(mutation, args, fallbackMessage = "Could not save change.") {
@@ -1140,6 +1206,103 @@ async function runAction(action, args, fallbackMessage = "Could not complete act
         console.error(error);
         showToast(fallbackMessage);
         return null;
+    }
+}
+
+function updateProposalStatus(messageId: string, proposalId: string, status: "pending" | "applied" | "dismissed") {
+    const message = findVisibleAssistantMessage(messageId);
+    if (!message?.proposals) return null;
+
+    const proposal = message.proposals.find((candidate) => candidate.id === proposalId);
+    if (!proposal) return null;
+
+    proposal.status = status;
+    return proposal;
+}
+
+async function applyAssistantProposal(messageId: string, proposalId: string) {
+    const message = findVisibleAssistantMessage(messageId);
+    const proposal = message?.proposals?.find((candidate) => candidate.id === proposalId);
+    if (!proposal || proposal.status === "applied" || !isMutatingAssistantProposal(proposal)) {
+        return false;
+    }
+
+    let result = null;
+
+    if (proposal.kind === "task_refine") {
+        result = await runMutation(
+            api.tasks.update,
+            {
+                taskId: proposal.taskId,
+                title: proposal.title,
+                description: proposal.description,
+            },
+            "Could not apply task refinement.",
+        );
+    } else if (proposal.kind === "schedule_change") {
+        result = await runMutation(
+            api.tasks.update,
+            {
+                taskId: proposal.taskId,
+                dueAt: proposal.dueAt,
+                priority: proposal.priority,
+            },
+            "Could not apply schedule draft.",
+        );
+    } else if (proposal.kind === "project_move") {
+        result = await runMutation(
+            api.tasks.update,
+            {
+                taskId: proposal.taskId,
+                projectId: proposal.projectId,
+            },
+            "Could not move task.",
+        );
+    } else if (proposal.kind === "starter_subtasks") {
+        let successCount = 0;
+        for (const subtaskTitle of proposal.subtasks) {
+            const addResult = await runMutation(
+                api.tasks.addSubtask,
+                {
+                    taskId: proposal.taskId,
+                    title: subtaskTitle,
+                },
+                "Could not add starter subtasks.",
+            );
+            if (addResult === null) {
+                result = null;
+                break;
+            }
+            successCount += 1;
+            result = addResult;
+        }
+
+        if (successCount !== proposal.subtasks.length) {
+            return false;
+        }
+    }
+
+    if (result === null) return false;
+
+    updateProposalStatus(messageId, proposalId, "applied");
+    updateAssistant();
+    return true;
+}
+
+async function applyAllAssistantProposals(messageId: string) {
+    const message = findVisibleAssistantMessage(messageId);
+    if (!message?.proposals?.length) return;
+
+    let appliedCount = 0;
+    for (const proposal of message.proposals) {
+        if (proposal.status === "applied" || !isMutatingAssistantProposal(proposal)) continue;
+        if (await applyAssistantProposal(messageId, proposal.id)) {
+            appliedCount += 1;
+        }
+    }
+
+    if (appliedCount > 0) {
+        showToast(appliedCount === 1 ? "applied 1 draft" : `applied ${appliedCount} drafts`);
     }
 }
 
@@ -1512,7 +1675,7 @@ document.addEventListener("keydown", (event) => {
 
     if (target?.id === "aiInput" && event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        sendMessage();
+        void sendMessage();
     }
 
     if (target?.id === "projectSetupInput" && event.key === "Enter" && !event.shiftKey) {
@@ -1937,7 +2100,27 @@ document.addEventListener("click", (event) => {
     }
 
     if (action === "assistant-suggestion") {
-        sendMessage(suggestion);
+        void sendMessage(suggestion);
+        return;
+    }
+
+    if (action === "assistant-apply-proposal") {
+        void applyAssistantProposal(actionElement.dataset.messageId, actionElement.dataset.proposalId).then((didApply) => {
+            if (didApply) {
+                showToast("applied draft");
+            }
+        });
+        return;
+    }
+
+    if (action === "assistant-apply-all-proposals") {
+        void applyAllAssistantProposals(actionElement.dataset.messageId);
+        return;
+    }
+
+    if (action === "assistant-dismiss-proposal") {
+        updateProposalStatus(actionElement.dataset.messageId, actionElement.dataset.proposalId, "dismissed");
+        updateAssistant();
         return;
     }
 
@@ -2044,7 +2227,7 @@ document.addEventListener("click", (event) => {
     }
 
     if (action === "send-message") {
-        sendMessage();
+        void sendMessage();
         return;
     }
 
