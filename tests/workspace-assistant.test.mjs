@@ -6,13 +6,29 @@ import {
     pickDefaultFocusTask,
 } from "../convex/lib/workspaceAssistant.js";
 
+function toLocalISODate(value) {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function addDays(days) {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + days);
+    return toLocalISODate(date);
+}
+
 function createWorkspace(overrides = {}) {
     return {
         projects: [
             {
                 id: "project-alpha",
                 name: "Alpha",
-                deadline: "2026-04-01",
+                deadline: addDays(30),
                 summary: "Alpha summary",
                 nextStep: "Ship alpha",
             },
@@ -22,7 +38,7 @@ function createWorkspace(overrides = {}) {
                 id: "task-overdue",
                 title: "Fix overdue issue",
                 description: "Needs attention",
-                dueAt: "2026-03-20",
+                dueAt: addDays(-1),
                 priority: "medium",
                 projectId: undefined,
                 subtasks: [{ id: "s1", title: "Check logs", done: false }],
@@ -33,7 +49,7 @@ function createWorkspace(overrides = {}) {
                 id: "task-project",
                 title: "Project next step",
                 description: "Important project task",
-                dueAt: "2026-03-25",
+                dueAt: addDays(4),
                 priority: "high",
                 projectId: "project-alpha",
                 subtasks: [{ id: "s2", title: "Draft brief", done: false }],
@@ -55,7 +71,7 @@ function createWorkspace(overrides = {}) {
                 id: "task-nearest",
                 title: "Tomorrow follow-up",
                 description: "Soon",
-                dueAt: "2026-03-22",
+                dueAt: addDays(1),
                 priority: "none",
                 projectId: undefined,
                 subtasks: [{ id: "s3", title: "Ping", done: false }],

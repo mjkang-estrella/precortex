@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { planTypeValue, projectBriefValue, routineValue } from "./lib/projectCopilot.js";
+import { aiAgentValue } from "./lib/taskAgent.js";
 
 const priorityValue = v.union(
     v.literal("none"),
@@ -49,6 +50,7 @@ export default defineSchema({
         sourceLabel: v.optional(v.string()),
         isStale: v.boolean(),
         subtasks: v.array(subtaskValue),
+        aiAgent: v.optional(aiAgentValue),
         sortKey: v.number(),
         createdAt: v.number(),
         updatedAt: v.number(),

@@ -3,6 +3,7 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { requireOwnerId } from "./lib/auth";
+import { buildExaSearchContext, exaSearch, shouldUseExaSearch } from "./lib/exa.js";
 import {
     normalizeWorkspaceAssistantResponse,
     workspaceAssistantMessageValue,
@@ -85,6 +86,7 @@ function buildUserPrompt(args: {
         tasks: Array<Record<string, unknown>>;
         counts: Record<string, unknown>;
     };
+    searchContext?: string;
 }) {
     const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -101,6 +103,7 @@ function buildUserPrompt(args: {
         "Workspace snapshot:",
         JSON.stringify(args.workspace, null, 2),
         "",
+        args.searchContext ? `External research context:\n${args.searchContext}\n` : "",
         "Generate the next assistant response.",
         "Important guidance:",
         "- Use summary.headline to explain the current state in one sentence.",
@@ -108,6 +111,39 @@ function buildUserPrompt(args: {
         "- Return proposals only when they clearly help the user act.",
         "- start_task proposals should be guidance only, not edits.",
     ].join("\n");
+}
+
+async function maybeLoadSearchContext(args: {
+    message: string;
+    workspace: { tasks: Array<Record<string, unknown>> };
+    selectedTaskId?: string | null;
+}) {
+    const exaApiKey = process.env.EXA_API_KEY;
+    if (!exaApiKey || !shouldUseExaSearch(args.message)) {
+        return "";
+    }
+
+    const selectedTask = args.selectedTaskId
+        ? args.workspace.tasks.find((task) => task.id === args.selectedTaskId)
+        : null;
+    const query = [
+        args.message,
+        selectedTask?.title ? `Current task: ${selectedTask.title}` : "",
+        selectedTask?.description ? `Task details: ${selectedTask.description}` : "",
+    ]
+        .filter(Boolean)
+        .join(". ");
+
+    try {
+        const results = await exaSearch(query, {
+            apiKey: exaApiKey,
+            numResults: 4,
+            maxCharacters: 1000,
+        });
+        return buildExaSearchContext(results);
+    } catch {
+        return "";
+    }
 }
 
 function extractJsonObject(text: string) {
@@ -262,11 +298,14 @@ export const reply = action({
                     text: message.text.trim(),
                 }))
                 .filter((message) => message.text),
+            searchContext: "",
         };
 
         if (!payload.message) {
             return createFallbackResponse(payload);
         }
+
+        payload.searchContext = await maybeLoadSearchContext(payload);
 
         try {
             return normalizeWorkspaceAssistantResponse(

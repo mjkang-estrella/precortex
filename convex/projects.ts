@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api.js";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { requireOwnerId } from "./lib/auth";
@@ -10,6 +11,7 @@ import {
     starterTaskValue,
     validateProjectCreateFromCopilot,
 } from "./lib/projectCopilot.js";
+import { createQueuedAiAgent } from "./lib/taskAgent.js";
 
 function toProjectResponse(project: {
     _id: Id<"projects">;
@@ -74,6 +76,13 @@ async function ensureProjectOwner(ctx: any, ownerId: string, projectId: Id<"proj
     }
 
     return project;
+}
+
+async function queueTaskEvaluation(ctx: any, taskId: Id<"tasks">, jobToken: number) {
+    await ctx.scheduler.runAfter(0, internal.taskAgent.evaluateAndSolve, {
+        taskId,
+        jobToken,
+    });
 }
 
 export const list = query({
@@ -143,7 +152,8 @@ export const create = mutation({
         const starterTasks = args.starterTasks ?? [];
 
         for (const [index, task] of starterTasks.entries()) {
-            await ctx.db.insert("tasks", {
+            const jobToken = now + index + 1;
+            const taskId = await ctx.db.insert("tasks", {
                 ownerId,
                 title: task.title.trim(),
                 description: task.description?.trim() ?? "",
@@ -155,11 +165,13 @@ export const create = mutation({
                 sourceLabel: undefined,
                 isStale: false,
                 subtasks: [],
+                aiAgent: createQueuedAiAgent(jobToken),
                 sortKey: firstSortKey - (starterTasks.length - index) * 1024,
                 createdAt: now,
                 updatedAt: now,
                 completedAt: undefined,
             });
+            await queueTaskEvaluation(ctx, taskId, jobToken);
         }
 
         const project = await ensureProjectOwner(ctx, ownerId, projectId);
@@ -201,7 +213,8 @@ export const createFromCopilot = mutation({
         const firstSortKey = existingTasks[0]?.sortKey ?? 0;
 
         for (const [index, task] of normalized.starterTasks.entries()) {
-            await ctx.db.insert("tasks", {
+            const jobToken = now + index + 1;
+            const taskId = await ctx.db.insert("tasks", {
                 ownerId,
                 title: task.title,
                 description: task.description ?? "",
@@ -213,11 +226,13 @@ export const createFromCopilot = mutation({
                 sourceLabel: undefined,
                 isStale: false,
                 subtasks: [],
+                aiAgent: createQueuedAiAgent(jobToken),
                 sortKey: firstSortKey - (normalized.starterTasks.length - index) * 1024,
                 createdAt: now,
                 updatedAt: now,
                 completedAt: undefined,
             });
+            await queueTaskEvaluation(ctx, taskId, jobToken);
         }
 
         const project = await ensureProjectOwner(ctx, ownerId, projectId);

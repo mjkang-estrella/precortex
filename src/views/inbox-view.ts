@@ -1,5 +1,6 @@
 import { tagColorMap } from "../data/tag-colors.js";
 import { escapeHtml } from "../utils/text.js";
+import { getAiResultSummary, isAiSolvedVisible } from "../utils/task-ai.js";
 
 function renderInboxMetadata(task) {
     const items = [];
@@ -45,11 +46,22 @@ function renderInboxMetadata(task) {
         `);
     }
 
+    if (isAiSolvedVisible(task)) {
+        if (items.length) items.push('<span class="w-1 h-1 rounded-full bg-stone-300"></span>');
+        items.push(`
+            <span class="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-medium lowercase border border-emerald-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                ai solved
+            </span>
+        `);
+    }
+
     return items.join("");
 }
 
 function renderInboxTaskRow(task, index = 0, editingDraft = null) {
     const staggerDelay = Math.min(index * 40, 300);
+    const aiSolvedVisible = isAiSolvedVisible(task);
 
     if (editingDraft) {
         return `
@@ -80,7 +92,7 @@ function renderInboxTaskRow(task, index = 0, editingDraft = null) {
     }
 
     return `
-        <div class="task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col xl:flex-row gap-4 hover:border-stone-400 hover:bg-stone-50/50 cursor-pointer transition-colors" data-action="open-task" data-task-id="${task.id}" data-task-list="inbox" draggable="true" style="animation-delay: ${staggerDelay}ms">
+        <div class="task-row group rounded-2xl p-5 flex flex-col xl:flex-row gap-4 cursor-pointer transition-colors ${aiSolvedVisible ? "bg-emerald-50/45 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50/70" : "bg-white border border-stone-200 hover:border-stone-400 hover:bg-stone-50/50"}" data-action="open-task" data-task-id="${task.id}" data-task-list="inbox" draggable="true" style="animation-delay: ${staggerDelay}ms">
             <div class="flex flex-1 items-start gap-4">
                 <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-1 flex-shrink-0" aria-label="mark task complete" type="button">
                     <div class="w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white group-hover:border-stone-400">
@@ -89,6 +101,11 @@ function renderInboxTaskRow(task, index = 0, editingDraft = null) {
                 </button>
                 <div class="flex-1 flex flex-col justify-center gap-1.5 min-w-0">
                     <div class="text-[16px] text-stone-900 font-medium transition-colors duration-200 task-title">${escapeHtml(task.title)}</div>
+                    ${
+                        getAiResultSummary(task)
+                            ? `<p class="text-[13px] text-emerald-700 leading-relaxed line-clamp-1 lowercase">${escapeHtml(getAiResultSummary(task))}</p>`
+                            : ""
+                    }
                     <div class="flex flex-wrap items-center gap-2 text-xs">
                         ${renderInboxMetadata(task)}
                     </div>

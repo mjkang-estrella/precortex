@@ -10814,6 +10814,17 @@ var tagColorMap = {
   emerald: "#10b981"
 };
 
+// src/utils/task-ai.js
+function isAiSolvedVisible(task) {
+  return task?.status !== "completed" && task?.aiAgent?.status === "solved" && task?.aiAgent?.highlighted;
+}
+function getAiResultSummary(task) {
+  return isAiSolvedVisible(task) ? task?.aiAgent?.resultSummary || "" : "";
+}
+function hasAiResult(task) {
+  return task?.aiAgent?.status === "solved" && Boolean(task?.aiAgent?.resultMarkdown);
+}
+
 // src/views/inbox-view.ts
 function renderInboxMetadata(task) {
   const items = [];
@@ -10851,10 +10862,20 @@ function renderInboxMetadata(task) {
             </span>
         `);
   }
+  if (isAiSolvedVisible(task)) {
+    if (items.length) items.push('<span class="w-1 h-1 rounded-full bg-stone-300"></span>');
+    items.push(`
+            <span class="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-medium lowercase border border-emerald-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                ai solved
+            </span>
+        `);
+  }
   return items.join("");
 }
 function renderInboxTaskRow(task, index = 0, editingDraft = null) {
   const staggerDelay = Math.min(index * 40, 300);
+  const aiSolvedVisible = isAiSolvedVisible(task);
   if (editingDraft) {
     return `
             <div class="task-row task-row-editing bg-white border border-stone-900/15 rounded-2xl p-5 flex flex-col gap-4 shadow-sm" data-task-id="${task.id}" data-task-list="inbox" style="animation-delay: ${staggerDelay}ms">
@@ -10883,7 +10904,7 @@ function renderInboxTaskRow(task, index = 0, editingDraft = null) {
         `;
   }
   return `
-        <div class="task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col xl:flex-row gap-4 hover:border-stone-400 hover:bg-stone-50/50 cursor-pointer transition-colors" data-action="open-task" data-task-id="${task.id}" data-task-list="inbox" draggable="true" style="animation-delay: ${staggerDelay}ms">
+        <div class="task-row group rounded-2xl p-5 flex flex-col xl:flex-row gap-4 cursor-pointer transition-colors ${aiSolvedVisible ? "bg-emerald-50/45 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50/70" : "bg-white border border-stone-200 hover:border-stone-400 hover:bg-stone-50/50"}" data-action="open-task" data-task-id="${task.id}" data-task-list="inbox" draggable="true" style="animation-delay: ${staggerDelay}ms">
             <div class="flex flex-1 items-start gap-4">
                 <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-1 flex-shrink-0" aria-label="mark task complete" type="button">
                     <div class="w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white group-hover:border-stone-400">
@@ -10892,6 +10913,7 @@ function renderInboxTaskRow(task, index = 0, editingDraft = null) {
                 </button>
                 <div class="flex-1 flex flex-col justify-center gap-1.5 min-w-0">
                     <div class="text-[16px] text-stone-900 font-medium transition-colors duration-200 task-title">${escapeHtml(task.title)}</div>
+                    ${getAiResultSummary(task) ? `<p class="text-[13px] text-emerald-700 leading-relaxed line-clamp-1 lowercase">${escapeHtml(getAiResultSummary(task))}</p>` : ""}
                     <div class="flex flex-wrap items-center gap-2 text-xs">
                         ${renderInboxMetadata(task)}
                     </div>
@@ -10958,6 +10980,38 @@ function renderInboxView({ inboxTasks, editingTaskId, editingTaskDraft }) {
 }
 
 // src/views/modal-view.ts
+function renderAiResultPanel(task) {
+  if (!hasAiResult(task)) {
+    return "";
+  }
+  const sourceItems = (task.aiAgent.sources || []).map(
+    (source) => `
+                <a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer" class="text-[12px] text-emerald-700 hover:text-emerald-900 underline underline-offset-2 break-all">
+                    ${escapeHtml(source.title)}
+                </a>
+            `
+  ).join("");
+  return `
+        <div class="pl-[38px]">
+            <div class="rounded-[28px] border border-emerald-200 bg-emerald-50/70 p-5 flex flex-col gap-4">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">ai result</div>
+                    <div class="rounded-full border border-emerald-200 bg-white px-3 py-1 text-[11px] font-medium text-emerald-700 lowercase">
+                        auto-solved research task
+                    </div>
+                </div>
+                ${task.aiAgent.resultSummary ? `<div class="text-[14px] leading-relaxed text-emerald-900">${escapeHtml(task.aiAgent.resultSummary)}</div>` : ""}
+                <div class="rounded-[22px] border border-emerald-200/80 bg-white px-4 py-4 text-[13px] leading-relaxed text-stone-700 whitespace-pre-wrap">${escapeHtml(task.aiAgent.resultMarkdown)}</div>
+                ${sourceItems ? `
+                            <div class="flex flex-col gap-2">
+                                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">sources</div>
+                                <div class="flex flex-col gap-2">${sourceItems}</div>
+                            </div>
+                        ` : ""}
+            </div>
+        </div>
+    `;
+}
 function renderProjectOptions(task, projects) {
   const options = [
     `<option value="" ${!task.projectId ? "selected" : ""}>inbox</option>`,
@@ -11023,6 +11077,7 @@ function renderTaskModal({
                     <div class="pl-[38px] flex flex-col gap-2">
                         <textarea id="modalDescriptionInput" data-task-id="${task.id}" aria-label="task description" class="w-full bg-transparent text-[15px] leading-relaxed text-stone-600 outline-none resize-none min-h-[100px] placeholder-stone-400" placeholder="add a description...">${escapeHtml(task.description || "")}</textarea>
                     </div>
+                    ${renderAiResultPanel(task)}
                     <div class="pl-[38px] flex flex-col gap-3">
                         <div class="flex items-center justify-between mb-1 gap-3 flex-wrap">
                             <h3 class="text-[13px] font-semibold text-stone-900 lowercase tracking-wide">subtasks</h3>
@@ -11740,6 +11795,14 @@ function renderTaskBadges(task) {
             </span>
         `);
   }
+  if (isAiSolvedVisible(task)) {
+    badges.push(`
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 lowercase text-xs font-medium shadow-sm">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                ai solved
+            </span>
+        `);
+  }
   task.tags.forEach((tag) => {
     badges.push(`
             <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-dashed border-stone-300 bg-white text-stone-500 lowercase text-xs font-medium">
@@ -11758,7 +11821,8 @@ function renderTaskCard(task, options = {}) {
   const editDraft = options.editingDraft;
   const badges = renderTaskBadges(task);
   const anchorAttribute = anchorDate ? `data-anchor-date="${anchorDate}"` : "";
-  const rowClasses = isCompleted ? "task-row completed group bg-stone-50/60 rounded-xl px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2" : "task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col gap-3 hover:border-stone-400 hover:bg-stone-50/50 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2";
+  const aiSolvedVisible = isAiSolvedVisible(task);
+  const rowClasses = isCompleted ? "task-row completed group bg-stone-50/60 rounded-xl px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2" : `task-row group rounded-2xl p-5 flex flex-col gap-3 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2 ${aiSolvedVisible ? "bg-emerald-50/45 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50/70" : "bg-white border border-stone-200 hover:border-stone-400 hover:bg-stone-50/50"}`;
   const titleClasses = isCompleted ? "text-[14px] text-stone-400 font-medium line-through task-title" : "text-[15px] text-stone-900 font-semibold transition-colors duration-200 task-title";
   const checkboxClasses = isCompleted ? "w-[22px] h-[22px] rounded-full border-2 border-stone-900 bg-stone-900 flex items-center justify-center transition-all" : "w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white group-hover:border-stone-400";
   if (isEditing && editDraft) {
@@ -11813,6 +11877,7 @@ function renderTaskCard(task, options = {}) {
                 <div class="flex-1 flex flex-col justify-center gap-1.5 pt-0.5">
                     <div class="${titleClasses}">${escapeHtml(task.title)}</div>
                     ${task.description ? `<p class="text-[13px] text-stone-500 leading-relaxed line-clamp-1">${escapeHtml(task.description)}</p>` : ""}
+                    ${getAiResultSummary(task) ? `<p class="text-[12px] text-emerald-700 leading-relaxed line-clamp-1 lowercase">${escapeHtml(getAiResultSummary(task))}</p>` : ""}
                 </div>
             </div>
             ${badges ? `

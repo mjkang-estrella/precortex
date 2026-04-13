@@ -1,6 +1,7 @@
 import { tagColorMap } from "../data/tag-colors.js";
 import { getTaskDueMeta } from "../state/selectors.js";
 import { escapeHtml } from "../utils/text.js";
+import { getAiResultSummary, isAiSolvedVisible } from "../utils/task-ai.js";
 
 export function renderTaskBadges(task) {
     const dueMeta = getTaskDueMeta(task);
@@ -24,6 +25,15 @@ export function renderTaskBadges(task) {
             <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-200 bg-stone-50 text-stone-500 lowercase text-xs font-medium">
                 <span class="w-1.5 h-1.5 rounded-full bg-stone-400"></span>
                 ${escapeHtml(task.projectName)}
+            </span>
+        `);
+    }
+
+    if (isAiSolvedVisible(task)) {
+        badges.push(`
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 lowercase text-xs font-medium shadow-sm">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                ai solved
             </span>
         `);
     }
@@ -60,10 +70,15 @@ export function renderTaskCard(
     const editDraft = options.editingDraft;
     const badges = renderTaskBadges(task);
     const anchorAttribute = anchorDate ? `data-anchor-date="${anchorDate}"` : "";
+    const aiSolvedVisible = isAiSolvedVisible(task);
 
     const rowClasses = isCompleted
         ? "task-row completed group bg-stone-50/60 rounded-xl px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2"
-        : "task-row group bg-white border border-stone-200 rounded-2xl p-5 flex flex-col gap-3 hover:border-stone-400 hover:bg-stone-50/50 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2";
+        : `task-row group rounded-2xl p-5 flex flex-col gap-3 transition-colors cursor-pointer scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-900 focus-visible:outline-offset-2 ${
+              aiSolvedVisible
+                  ? "bg-emerald-50/45 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50/70"
+                  : "bg-white border border-stone-200 hover:border-stone-400 hover:bg-stone-50/50"
+          }`;
     const titleClasses = isCompleted
         ? "text-[14px] text-stone-400 font-medium line-through task-title"
         : "text-[15px] text-stone-900 font-semibold transition-colors duration-200 task-title";
@@ -133,6 +148,11 @@ export function renderTaskCard(
                     ${
                         task.description
                             ? `<p class="text-[13px] text-stone-500 leading-relaxed line-clamp-1">${escapeHtml(task.description)}</p>`
+                            : ""
+                    }
+                    ${
+                        getAiResultSummary(task)
+                            ? `<p class="text-[12px] text-emerald-700 leading-relaxed line-clamp-1 lowercase">${escapeHtml(getAiResultSummary(task))}</p>`
                             : ""
                     }
                 </div>

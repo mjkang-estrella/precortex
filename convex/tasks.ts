@@ -1,8 +1,14 @@
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api.js";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireOwnerId } from "./lib/auth";
 import { assertTaskMatchesList, normalizeOptionalIsoDate, requireTrimmedText } from "./lib/domain.js";
+import {
+    createIdleAiAgent,
+    createQueuedAiAgent,
+    shouldRequeueTaskUpdate,
+} from "./lib/taskAgent.js";
 
 const priorityValue = v.union(
     v.literal("none"),
@@ -39,11 +45,32 @@ function toTaskResponse(task: Doc<"tasks"> & { _id: Id<"tasks"> }) {
             title: subtask.title,
             done: subtask.done,
         })),
+        aiAgent: {
+            status: task.aiAgent?.status ?? "idle",
+            solvableType: task.aiAgent?.solvableType ?? null,
+            highlighted: Boolean(task.aiAgent?.highlighted),
+            resultMarkdown: task.aiAgent?.resultMarkdown ?? null,
+            resultSummary: task.aiAgent?.resultSummary ?? null,
+            sources: (task.aiAgent?.sources ?? []).map((source) => ({
+                title: source.title,
+                url: source.url,
+            })),
+            lastEvaluatedAt: task.aiAgent?.lastEvaluatedAt ?? null,
+            solvedAt: task.aiAgent?.solvedAt ?? null,
+            jobToken: task.aiAgent?.jobToken ?? 0,
+        },
         sortKey: task.sortKey,
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
         completedAt: task.completedAt ?? null,
     };
+}
+
+async function queueTaskEvaluation(ctx: any, taskId: Id<"tasks">, jobToken: number) {
+    await ctx.scheduler.runAfter(0, internal.taskAgent.evaluateAndSolve, {
+        taskId,
+        jobToken,
+    });
 }
 
 async function listOwnerTasks(ctx: any, ownerId: string) {
@@ -165,6 +192,8 @@ export const create = mutation({
         await ensureProjectOwner(ctx, ownerId, args.projectId);
 
         const tasks = await listOwnerTasks(ctx, ownerId);
+        const now = Date.now();
+        const jobToken = now;
         const taskId = await ctx.db.insert("tasks", {
             ownerId,
             title: requireTrimmedText(args.title, "Task title"),
@@ -180,11 +209,14 @@ export const create = mutation({
                 ...subtask,
                 title: requireTrimmedText(subtask.title, "Subtask title"),
             })),
+            aiAgent: createQueuedAiAgent(jobToken),
             sortKey: getTopSortKey(tasks) - SORT_STEP,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
+            createdAt: now,
+            updatedAt: now,
             completedAt: undefined,
         });
+
+        await queueTaskEvaluation(ctx, taskId, jobToken);
 
         const task = await ensureTaskOwner(ctx, ownerId, taskId);
         return toTaskResponse({ _id: taskId, ...task });
@@ -202,14 +234,16 @@ export const update = mutation({
     },
     handler: async (ctx, args) => {
         const ownerId = await requireOwnerId(ctx);
-        await ensureTaskOwner(ctx, ownerId, args.taskId);
+        const task = await ensureTaskOwner(ctx, ownerId, args.taskId);
 
         const nextProjectId = args.projectId ?? undefined;
         if (nextProjectId) {
             await ensureProjectOwner(ctx, ownerId, nextProjectId);
         }
 
-        const patch: Record<string, unknown> = { updatedAt: Date.now() };
+        const now = Date.now();
+        const patch: Record<string, unknown> = { updatedAt: now };
+        const shouldRequeue = shouldRequeueTaskUpdate(task, args);
 
         if (args.title !== undefined) patch.title = requireTrimmedText(args.title, "Task title");
         if (args.description !== undefined) patch.description = args.description.trim();
@@ -217,7 +251,15 @@ export const update = mutation({
         if (args.projectId !== undefined) patch.projectId = args.projectId ?? undefined;
         if (args.dueAt !== undefined) patch.dueAt = normalizeOptionalIsoDate(args.dueAt ?? undefined, "due date");
 
+        if (shouldRequeue) {
+            patch.aiAgent = createQueuedAiAgent(now);
+        }
+
         await ctx.db.patch(args.taskId, patch);
+
+        if (shouldRequeue) {
+            await queueTaskEvaluation(ctx, args.taskId, now);
+        }
     },
 });
 
@@ -241,6 +283,7 @@ export const setStatus = mutation({
             completedAt: args.status === "completed" ? now : undefined,
             updatedAt: now,
             dueAt: task.dueAt,
+            aiAgent: task.aiAgent ?? createIdleAiAgent(),
         });
     },
 });

@@ -1,5 +1,51 @@
 import { getTaskDueMeta } from "../state/selectors.js";
 import { escapeHtml } from "../utils/text.js";
+import { hasAiResult } from "../utils/task-ai.js";
+
+function renderAiResultPanel(task) {
+    if (!hasAiResult(task)) {
+        return "";
+    }
+
+    const sourceItems = (task.aiAgent.sources || [])
+        .map(
+            (source) => `
+                <a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer" class="text-[12px] text-emerald-700 hover:text-emerald-900 underline underline-offset-2 break-all">
+                    ${escapeHtml(source.title)}
+                </a>
+            `,
+        )
+        .join("");
+
+    return `
+        <div class="pl-[38px]">
+            <div class="rounded-[28px] border border-emerald-200 bg-emerald-50/70 p-5 flex flex-col gap-4">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">ai result</div>
+                    <div class="rounded-full border border-emerald-200 bg-white px-3 py-1 text-[11px] font-medium text-emerald-700 lowercase">
+                        auto-solved research task
+                    </div>
+                </div>
+                ${
+                    task.aiAgent.resultSummary
+                        ? `<div class="text-[14px] leading-relaxed text-emerald-900">${escapeHtml(task.aiAgent.resultSummary)}</div>`
+                        : ""
+                }
+                <div class="rounded-[22px] border border-emerald-200/80 bg-white px-4 py-4 text-[13px] leading-relaxed text-stone-700 whitespace-pre-wrap">${escapeHtml(task.aiAgent.resultMarkdown)}</div>
+                ${
+                    sourceItems
+                        ? `
+                            <div class="flex flex-col gap-2">
+                                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">sources</div>
+                                <div class="flex flex-col gap-2">${sourceItems}</div>
+                            </div>
+                        `
+                        : ""
+                }
+            </div>
+        </div>
+    `;
+}
 
 function renderProjectOptions(task, projects) {
     const options = [
@@ -91,6 +137,7 @@ export function renderTaskModal({
                     <div class="pl-[38px] flex flex-col gap-2">
                         <textarea id="modalDescriptionInput" data-task-id="${task.id}" aria-label="task description" class="w-full bg-transparent text-[15px] leading-relaxed text-stone-600 outline-none resize-none min-h-[100px] placeholder-stone-400" placeholder="add a description...">${escapeHtml(task.description || "")}</textarea>
                     </div>
+                    ${renderAiResultPanel(task)}
                     <div class="pl-[38px] flex flex-col gap-3">
                         <div class="flex items-center justify-between mb-1 gap-3 flex-wrap">
                             <h3 class="text-[13px] font-semibold text-stone-900 lowercase tracking-wide">subtasks</h3>

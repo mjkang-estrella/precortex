@@ -3,6 +3,7 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { requireOwnerId } from "./lib/auth";
+import { buildExaSearchContext, exaSearch, shouldUseExaSearch } from "./lib/exa.js";
 import {
     copilotMessageValue,
     normalizeCopilotResponse,
@@ -77,7 +78,7 @@ function buildTranscript(messages: Array<{ sender: string; text: string }>) {
         .join("\n");
 }
 
-function buildUserPrompt(messages: Array<{ sender: string; text: string }>) {
+function buildUserPrompt(messages: Array<{ sender: string; text: string }>, searchContext = "") {
     const todayIso = new Date().toISOString().slice(0, 10);
 
     return [
@@ -85,6 +86,7 @@ function buildUserPrompt(messages: Array<{ sender: string; text: string }>) {
         "Conversation transcript:",
         buildTranscript(messages),
         "",
+        searchContext ? `External research context:\n${searchContext}\n` : "",
         "Generate the next copilot response.",
         "Important guidance:",
         "- Extract and preserve as much structured project state as the user has already revealed.",
@@ -93,6 +95,25 @@ function buildUserPrompt(messages: Array<{ sender: string; text: string }>) {
         "- Missing information should only list the truly important gaps.",
         "- Starter tasks must be specific and immediately executable.",
     ].join("\n");
+}
+
+async function maybeLoadSearchContext(messages: Array<{ sender: string; text: string }>) {
+    const exaApiKey = process.env.EXA_API_KEY;
+    const latestUserMessage = [...messages].reverse().find((message) => message.sender === "user")?.text || "";
+    if (!exaApiKey || !shouldUseExaSearch(latestUserMessage)) {
+        return "";
+    }
+
+    try {
+        const results = await exaSearch(buildTranscript(messages), {
+            apiKey: exaApiKey,
+            numResults: 4,
+            maxCharacters: 1000,
+        });
+        return buildExaSearchContext(results);
+    } catch {
+        return "";
+    }
 }
 
 function extractJsonObject(text: string) {
@@ -126,7 +147,7 @@ async function parseJsonResponse(response: Response) {
     return data;
 }
 
-async function callAnthropic(messages: Array<{ sender: string; text: string }>) {
+async function callAnthropic(messages: Array<{ sender: string; text: string }>, searchContext = "") {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
         throw new Error("Anthropic is not configured.");
@@ -146,7 +167,7 @@ async function callAnthropic(messages: Array<{ sender: string; text: string }>) 
             messages: [
                 {
                     role: "user",
-                    content: buildUserPrompt(messages),
+                    content: buildUserPrompt(messages, searchContext),
                 },
             ],
         }),
@@ -161,7 +182,7 @@ async function callAnthropic(messages: Array<{ sender: string; text: string }>) 
     return JSON.parse(extractJsonObject(text));
 }
 
-async function callOpenAi(messages: Array<{ sender: string; text: string }>) {
+async function callOpenAi(messages: Array<{ sender: string; text: string }>, searchContext = "") {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
         throw new Error("OpenAI fallback is not configured.");
@@ -183,7 +204,7 @@ async function callOpenAi(messages: Array<{ sender: string; text: string }>) {
                 },
                 {
                     role: "user",
-                    content: buildUserPrompt(messages),
+                    content: buildUserPrompt(messages, searchContext),
                 },
             ],
         }),
@@ -235,11 +256,13 @@ export const reply = action({
             return normalizeCopilotResponse(createInitialResponse());
         }
 
+        const searchContext = await maybeLoadSearchContext(messages);
+
         try {
-            return normalizeCopilotResponse(await callAnthropic(messages));
+            return normalizeCopilotResponse(await callAnthropic(messages, searchContext));
         } catch (anthropicError) {
             try {
-                return normalizeCopilotResponse(await callOpenAi(messages));
+                return normalizeCopilotResponse(await callOpenAi(messages, searchContext));
             } catch (openAiError) {
                 const anthroMessage =
                     anthropicError instanceof Error ? anthropicError.message : "Anthropic request failed.";
