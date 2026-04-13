@@ -12,6 +12,7 @@ import type * as auth from "../auth.js";
 import type * as debug from "../debug.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_domain from "../lib/domain.js";
+import type * as lib_exa from "../lib/exa.js";
 import type * as lib_projectCopilot from "../lib/projectCopilot.js";
 import type * as lib_taskAgent from "../lib/taskAgent.js";
 import type * as lib_transcription from "../lib/transcription.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   debug: typeof debug;
   "lib/auth": typeof lib_auth;
   "lib/domain": typeof lib_domain;
+  "lib/exa": typeof lib_exa;
   "lib/projectCopilot": typeof lib_projectCopilot;
   "lib/taskAgent": typeof lib_taskAgent;
   "lib/transcription": typeof lib_transcription;
