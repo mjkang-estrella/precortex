@@ -24,6 +24,17 @@ test("evaluateResearchQaEligibility accepts narrow compare research tasks", () =
     assert.equal(result.solvableType, "research_qa");
 });
 
+test("evaluateResearchQaEligibility accepts broad research-about tasks with implied brief deliverable", () => {
+    const result = evaluateResearchQaEligibility({
+        title: "Research about SEO algorithms",
+        description: "",
+    });
+
+    assert.equal(result.eligible, true);
+    assert.equal(result.solvableType, "research_qa");
+    assert.match(result.reason, /overview brief|research request/i);
+});
+
 test("evaluateResearchQaEligibility rejects side-effectful tasks", () => {
     const result = evaluateResearchQaEligibility({
         title: "email Sam about the vendor contract",

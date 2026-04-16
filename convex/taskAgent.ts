@@ -84,7 +84,8 @@ async function classifyTask(task: { title: string; description: string }) {
             role: "system",
             content: [
                 "You are a strict task classifier for an AI auto-solving agent.",
-                "Only classify a task as solvable when it is narrow research or Q&A work with a clear deliverable.",
+                "Classify a task as solvable when it is research or Q&A work that can be answered with a concise brief, summary, comparison, or overview.",
+                "If the task is phrased as broad research like 'research about X', treat the implied deliverable as a concise overview brief.",
                 "Reject tasks that require external side effects, coding, design, file editing, outreach, or open-ended strategy.",
                 "Return JSON only: { solvable: boolean, solvableType: 'research_qa' | null, reason: string }",
             ].join("\n"),
@@ -140,6 +141,7 @@ async function solveResearchTask(task: { title: string; description: string }) {
                 "- Include 2 to 6 sources.",
                 "- Only include valid http or https URLs.",
                 "- Only use the provided Exa search context as factual grounding.",
+                "- If the task does not specify an output format, default to a concise overview brief with key findings.",
             ].join("\n"),
         },
         {

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" fill="none">
+  <rect width="1200" height="360" rx="72" fill="#F8F6F1"/>
+  <rect x="56" y="56" width="248" height="248" rx="66" fill="#1C1917"/>
+  <rect x="73" y="73" width="214" height="214" rx="52" stroke="#F5F0E8" stroke-opacity=".08" stroke-width="2"/>
+  <line x1="126" y1="139" x2="247" y2="170" stroke="#F5F0E8" stroke-width="15" stroke-linecap="round"/>
+  <line x1="126" y1="180" x2="202" y2="180" stroke="#F5F0E8" stroke-opacity=".62" stroke-width="15" stroke-linecap="round"/>
+  <line x1="126" y1="221" x2="247" y2="190" stroke="#F5F0E8" stroke-width="15" stroke-linecap="round"/>
+  <circle cx="126" cy="139" r="11" fill="#F5F0E8"/>
+  <circle cx="126" cy="180" r="11" fill="#F5F0E8" fill-opacity=".68"/>
+  <circle cx="126" cy="221" r="11" fill="#F5F0E8"/>
+  <circle cx="247" cy="180" r="28" fill="#F5F0E8"/>
+  <circle cx="247" cy="180" r="15" fill="#1C1917"/>
+  <circle cx="268" cy="146" r="10" fill="#10B981"/>
+  <path d="M263 146l4 4 8-9" stroke="#F5F0E8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <text x="360" y="178" fill="#1C1917" font-family="Georgia, 'Times New Roman', serif" font-size="76" font-weight="600" letter-spacing="-3">precortex</text>
+  <text x="364" y="232" fill="#78716C" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" letter-spacing="4">THINK BEFORE THE DAY MOVES</text>
+</svg>

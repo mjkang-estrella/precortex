@@ -118,6 +118,14 @@ const POSITIVE_PATTERNS = [
     /\b(compare|comparison|research|find|lookup|look up|what is|which is|summarize|summary|brief|explain|answer|list|top \d+|best)\b/i,
 ];
 
+const BROAD_RESEARCH_PATTERNS = [
+    /\bresearch about\b/i,
+    /\bresearch\b/i,
+    /\blearn about\b/i,
+    /\blook into\b/i,
+    /\bunderstand\b/i,
+];
+
 const DELIVERABLE_PATTERNS = [
     /\b(summary|brief|answer|comparison|options|list|recommendation|findings|overview|pros and cons)\b/i,
     /\bcompare\b/i,
@@ -154,7 +162,10 @@ export function evaluateResearchQaEligibility(task) {
         };
     }
 
-    if (!DELIVERABLE_PATTERNS.some((pattern) => pattern.test(content))) {
+    const hasDeliverable = DELIVERABLE_PATTERNS.some((pattern) => pattern.test(content));
+    const isBroadResearchAsk = BROAD_RESEARCH_PATTERNS.some((pattern) => pattern.test(content));
+
+    if (!hasDeliverable && !isBroadResearchAsk) {
         return {
             eligible: false,
             reason: "Task does not specify a concrete research deliverable.",
@@ -164,7 +175,9 @@ export function evaluateResearchQaEligibility(task) {
     return {
         eligible: true,
         solvableType: "research_qa",
-        reason: "Task is a narrow research or question-answer request with a clear output.",
+        reason: hasDeliverable
+            ? "Task is a research or question-answer request with a clear output."
+            : "Task is a research request and can default to a concise overview brief.",
     };
 }
 
