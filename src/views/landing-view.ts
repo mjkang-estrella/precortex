@@ -1,4 +1,10 @@
+import { createDemoWorkspace } from "../state/demo.js";
+import { renderTaskCard } from "./task-card.js";
+import { TODAY_ISO } from "../utils/date.js";
+
 export function renderLandingPage() {
+    const sample = createDemoWorkspace();
+    const preview = renderTaskCard({ ...sample.tasks[0], dueAt: TODAY_ISO, priority: "high", projectName: "Community workshop" }, { listId: "preview" });
     return `
     <div class="landing-page min-h-screen w-full overflow-x-hidden">
 
@@ -22,8 +28,8 @@ export function renderLandingPage() {
         </nav>
 
         <!-- HERO -->
-        <section class="relative min-h-[100svh] flex flex-col justify-center px-6 sm:px-10 lg:px-16 pt-24 pb-16">
-            <div class="mx-auto max-w-7xl w-full">
+        <section class="relative flex flex-col justify-center px-6 sm:px-10 lg:px-16 pt-24 pb-16">
+            <div class="mx-auto max-w-7xl w-full landing-hero-grid">
                 <div class="max-w-3xl landing-stagger">
                     <div class="landing-reveal" style="--reveal-i: 0">
                         <span class="inline-block text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500 mb-6 sm:mb-8">Task planner with AI</span>
@@ -34,25 +40,35 @@ export function renderLandingPage() {
                         <span class="font-display text-[clamp(2.8rem,7vw,5.5rem)] leading-[1.05] tracking-tight text-stone-900 block">moving.</span>
                     </h1>
                     <p class="landing-reveal mt-8 sm:mt-10 max-w-lg text-[clamp(1rem,1.8vw,1.125rem)] leading-[1.7] text-stone-600" style="--reveal-i: 2">
-                        Precortex helps you organize projects, triage tasks, and plan your day — with an AI assistant that understands your priorities.
+                        Turn a full inbox into a day you can act on. Try the real planner with sample tasks, then decide whether to make it yours.
                     </p>
                     <div class="landing-reveal mt-10 sm:mt-12 flex flex-wrap items-center gap-4" style="--reveal-i: 3">
                         <button
-                            data-action="login"
+                            data-action="start-demo"
                             class="group px-7 py-4 bg-stone-900 text-white text-[14px] font-semibold tracking-tight rounded-2xl hover:bg-stone-800 transition-all duration-300 flex items-center gap-3"
                             type="button"
                         >
-                            Get started
+                            Try the demo
                             <svg class="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                         </button>
                         <button
-                            data-action="scroll-features"
+                            data-action="start-demo"
                             class="px-5 py-4 text-[14px] font-medium tracking-tight text-stone-500 hover:text-stone-900 transition-colors duration-300"
                             type="button"
                         >
-                            See how it works
+                            No account needed
                         </button>
                     </div>
+                </div>
+                <div class="landing-product-preview">
+                    <div class="landing-preview-heading"><span>precortex</span><span>Sample workspace</span></div>
+                    <div class="landing-preview-content" inert aria-hidden="true">
+                        <div class="landing-preview-tabs"><span>inbox</span><strong>today</strong><span>upcoming</span></div>
+                        <h2 class="font-display text-4xl mb-5">A place to start.</h2>
+                        ${preview}
+                    </div>
+                    <p>Actual task card from the planner. In the demo, choose a priority, change the date, and undo your choice.</p>
+                    <a href="/?demo=1">Open the interactive workspace <span aria-hidden="true">→</span></a>
                 </div>
             </div>
 
@@ -80,7 +96,7 @@ export function renderLandingPage() {
                             <h3 class="font-display text-[1.35rem] text-white tracking-tight">Capture everything</h3>
                         </div>
                         <p class="text-[15px] leading-[1.75] text-stone-400 max-w-sm">
-                            Tasks land in your inbox from any source. Voice notes, quick entries, AI suggestions — nothing slips through. Triage when you're ready.
+                            Add a task with a quick entry, then decide when to work on it. The demo starts with a fictional inbox so you can try that decision right away.
                         </p>
                         <div class="mt-8 flex items-center gap-3">
                             <div class="flex items-center gap-2 px-3 py-1.5 bg-stone-800 rounded-lg text-[12px] text-stone-400">
@@ -89,7 +105,7 @@ export function renderLandingPage() {
                             </div>
                             <div class="flex items-center gap-2 px-3 py-1.5 bg-stone-800 rounded-lg text-[12px] text-stone-400">
                                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V6a3 3 0 0 1 3-3"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
-                                voice
+                                quick entry
                             </div>
                         </div>
                     </div>
@@ -101,7 +117,7 @@ export function renderLandingPage() {
                             <h3 class="font-display text-[1.35rem] text-white tracking-tight">Plan with clarity</h3>
                         </div>
                         <p class="text-[15px] leading-[1.75] text-stone-400 max-w-sm">
-                            Schedule tasks to today, this week, or later. Group work into projects with deadlines. See your upcoming week at a glance — no clutter.
+                            Schedule tasks for today or another date. Group work into projects with deadlines and see your upcoming week. Change your plan as you go.
                         </p>
                         <div class="mt-8 flex items-center gap-2">
                             <span class="px-3 py-1.5 bg-stone-800 rounded-lg text-[12px] text-stone-400">today</span>
@@ -117,7 +133,7 @@ export function renderLandingPage() {
                             <h3 class="font-display text-[1.35rem] text-white tracking-tight">Ask your assistant</h3>
                         </div>
                         <p class="text-[15px] leading-[1.75] text-stone-400 max-w-sm">
-                            An AI assistant sits alongside your workspace. Ask it to break down projects, suggest priorities, or draft next steps. It knows your context.
+                            Review suggested priorities and smaller steps before applying them. The demo labels its prewritten examples. Live AI planning requires an account and a configured provider.
                         </p>
                         <div class="mt-8">
                             <div class="flex items-center gap-2 px-3 py-1.5 bg-stone-800 rounded-lg text-[12px] text-stone-400 w-fit">
@@ -140,7 +156,7 @@ export function renderLandingPage() {
                     <div>
                         <span class="inline-block text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500 mb-5">Philosophy</span>
                         <h2 class="font-display text-[clamp(1.8rem,3.5vw,2.8rem)] leading-[1.15] tracking-tight text-stone-900">
-                            Not another productivity app.
+                            Your judgment comes first.
                         </h2>
                     </div>
                     <div class="lg:pt-12">
@@ -148,7 +164,7 @@ export function renderLandingPage() {
                             Most planners drown you in features. Precortex strips back to what matters: knowing what to do next, and having space to think about it.
                         </p>
                         <p class="text-[clamp(0.95rem,1.5vw,1.05rem)] leading-[1.8] text-stone-600 mb-10">
-                            The inbox holds everything until you're ready to decide. Projects keep related work together. The AI doesn't automate your thinking — it supports it.
+                            The inbox holds everything until you're ready to decide. Projects keep related work together. Review each suggestion, change it, or leave it unapplied. Your judgment sets the plan.
                         </p>
                         <div class="flex flex-col gap-5">
                             <div class="flex items-start gap-4">
@@ -157,11 +173,11 @@ export function renderLandingPage() {
                             </div>
                             <div class="flex items-start gap-4">
                                 <div class="w-1 h-1 rounded-full bg-stone-400 mt-[10px] flex-shrink-0"></div>
-                                <span class="text-[14px] leading-[1.6] text-stone-700">Voice capture for when typing breaks your flow</span>
+                                <span class="text-[14px] leading-[1.6] text-stone-700">Voice capture in your account, when transcription is configured</span>
                             </div>
                             <div class="flex items-start gap-4">
                                 <div class="w-1 h-1 rounded-full bg-stone-400 mt-[10px] flex-shrink-0"></div>
-                                <span class="text-[14px] leading-[1.6] text-stone-700">Real-time sync across devices, always current</span>
+                                <span class="text-[14px] leading-[1.6] text-stone-700">Account workspaces sync across devices; demo changes stay in this tab</span>
                             </div>
                         </div>
                     </div>
@@ -175,18 +191,18 @@ export function renderLandingPage() {
                 <div class="bg-stone-900 rounded-[32px] px-8 sm:px-14 lg:px-20 py-16 sm:py-20 lg:py-24 flex flex-col items-start lg:flex-row lg:items-end lg:justify-between gap-10">
                     <div class="max-w-lg">
                         <h2 class="font-display text-[clamp(2rem,4vw,3rem)] leading-[1.1] tracking-tight text-white mb-4">
-                            Start your workspace.
+                            Try a day in Precortex.
                         </h2>
                         <p class="text-[15px] leading-[1.75] text-stone-400">
-                            Free to use. Set up in under a minute.
+                            No login. Fictional tasks. A plan you can change.
                         </p>
                     </div>
                     <button
-                        data-action="login"
+                        data-action="start-demo"
                         class="group px-8 py-4 bg-white text-stone-900 text-[14px] font-semibold tracking-tight rounded-2xl hover:bg-stone-100 transition-all duration-300 flex items-center gap-3 flex-shrink-0"
                         type="button"
                     >
-                        Get started
+                        Open the demo
                         <svg class="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                     </button>
                 </div>

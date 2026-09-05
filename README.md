@@ -150,3 +150,37 @@ Current tests cover backend/domain behavior such as:
 - There is no framework runtime here; the frontend is a direct browser app.
 - `dist/` and `build/` are generated and ignored by Git.
 - `.env` and `.env.local` are ignored by Git.
+
+## Public demo
+
+Open `/?demo=1` without logging in. The demo uses the application's Inbox, Today,
+Upcoming, project views, task cards, and task details. Its fictional workshop
+and tasks are created afresh in memory. Every change, including subtasks,
+completion, priority, date, and project assignment, stays in that page. Reloading
+or leaving discards it; Reset restores the starting state. Undo retains up to 50
+changes in this page. Nothing is imported into an account on login.
+
+The demo branch never initializes Auth0 or Convex and never calls live AI or
+voice transcription. Its explicitly prewritten planning example explains its
+reasoning before the visitor applies it. Account AI planning, new-project setup,
+and voice transcription require their existing configured backend providers.
+No new backend functions, public AI endpoints, or environment variables are needed.
+
+The landing page also renders without local auth configuration. To run the demo:
+
+```bash
+PORT=4187 npm run dev
+npm run check
+npm run test:backend
+npm run test:demo:browser
+```
+
+The browser check uses Playwright CLI through `npx` in an isolated browser
+profile. It checks triage, priority/date edits, undo, subtasks, reset, mobile
+layout, keyboard focus, unchanged sample account-storage sentinels, and zero
+Auth0/Convex/AI requests or WebSockets in the demo. It does not authenticate a
+real account. Set `DEMO_BASE_URL` to test another deployment.
+
+Production follows the existing Vercel Git integration from `main`, with
+`npm run build` and the `build/` output directory. Keep the production public
+Auth0 and Convex environment configuration unchanged.

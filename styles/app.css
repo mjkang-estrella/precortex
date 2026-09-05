@@ -384,3 +384,63 @@ body.assistant-resizing * {
         opacity: 1 !important;
     }
 }
+
+
+/* Public demo reuses the planner; only guidance and example content are specific. */
+.demo-guide { padding: 18px 24px 14px; border-bottom: 1px solid #e7e5e4; background: #fafaf9; font-size: 12px; color: #57534e; }
+.demo-guide-top, .demo-guide-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.demo-guide-top strong { color: #1c1917; font-size: 14px; }
+.demo-guide p { margin-top: 7px; line-height: 1.55; max-width: 70ch; }
+.demo-guide a, .demo-guide-actions button { text-decoration: underline; text-underline-offset: 3px; }
+.demo-guide-actions { justify-content: flex-start; gap: 16px; margin-top: 10px; }
+.demo-steps { display: flex; gap: 6px; margin-top: 12px; }
+.demo-steps button { flex: 1; text-align: left; border: 1px solid #d6d3d1; border-radius: 8px; padding: 9px; font-size: 12px; color: #44403c; }
+.demo-steps button[aria-current="step"] { background: #292524; border-color: #292524; color: white; }
+.demo-steps span { margin-left: 3px; }
+.demo-mode button:disabled { opacity: .5; cursor: default; }
+.demo-mode :is(button, a, input, select, textarea):focus-visible { outline: 2px solid #57534e; outline-offset: 3px; }
+.demo-workspace-name { padding: 20px; font-weight: 600; font-size: 19px; }
+.demo-workspace-name span { display: block; color: #57534e; font-weight: 400; font-size: 12px; margin-top: 5px; }
+.demo-assistant { color: #44403c; font-size: 14px; line-height: 1.65; }
+.demo-assistant p { margin: 12px 0; }
+.demo-assistant .demo-example-label { color: #57534e; font-size: 12px; }
+.demo-assistant dl { border-block: 1px solid #e7e5e4; padding: 16px 0; margin: 20px 0; }
+.demo-assistant dt { font-size: 12px; color: #57534e; margin-top: 12px; }
+.demo-assistant dt:first-child { margin-top: 0; }
+.demo-assistant dd { margin-top: 3px; }
+.demo-assistant button { display: block; width: 100%; padding: 11px 14px; border: 1px solid #d6d3d1; border-radius: 12px; margin-top: 10px; text-align: center; }
+.demo-assistant .demo-primary { background: #292524; border-color: #292524; color: #fff; }
+.demo-breakdown { margin-top: 28px; padding-top: 20px; border-top: 1px solid #e7e5e4; }
+.demo-breakdown h3 { font-weight: 600; }
+.demo-assistant .demo-limit { font-size: 12px; color: #57534e; margin-top: 24px; }
+.demo-mode #assistantPanel > div:last-child { display: none; }
+.demo-mode #aiMessages { padding-bottom: 32px; }
+.landing-hero-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 60px; align-items: center; padding: 55px 0; }
+.landing-product-preview { border: 1px solid #d6d3d1; border-radius: 16px; overflow: hidden; background: #fff; }
+.landing-preview-heading { display: flex; justify-content: space-between; gap: 12px; padding: 18px 24px; border-bottom: 1px solid #e7e5e4; font-size: 12px; color: #57534e; }
+.landing-preview-content { padding: 24px; background: #fafaf9; }
+.landing-preview-tabs { display: flex; gap: 22px; font-size: 12px; color: #57534e; margin-bottom: 28px; }
+.landing-preview-tabs strong { color: #1c1917; }
+.landing-product-preview > p { font-size: 13px; line-height: 1.7; padding: 20px 24px 10px; color: #57534e; }
+.landing-product-preview > a { display: block; margin: 0 24px 24px; font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
+@media (max-width: 1023px) {
+    .landing-hero-grid { grid-template-columns: 1fr; gap: 36px; padding: 20px 0; }
+    .landing-product-preview { max-width: 600px; }
+    .demo-guide { padding: 12px 16px; }
+    .demo-guide-actions { gap: 12px; font-size: 11px; }
+    .demo-steps button { padding: 8px 6px; font-size: 11px; }
+    /* Keep date and priority controls reachable in short mobile dialogs. */
+    #taskModal [role="dialog"] > div:nth-child(2) { overflow-y: auto; }
+    #taskModal [role="dialog"] > div:nth-child(2) > div:first-child { overflow-y: visible; flex: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .demo-mode *, .landing-page * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+.demo-mode #assistantQuickActionsLabel { display: none; }
+.demo-mode #assistantPanel > div:nth-child(2) { display: none; }
+.demo-mode .task-row:focus-visible { outline: 2px solid #57534e; outline-offset: 3px; }
+.demo-mode .task-row:focus-within [data-action="schedule-task"] { opacity: 1; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) {
+    .landing-page .landing-reveal { opacity: 1; transform: none; }
+}

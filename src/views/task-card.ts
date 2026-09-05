@@ -20,6 +20,10 @@ export function renderTaskBadges(task) {
         `);
     }
 
+    if (task.priority && task.priority !== "none") {
+        badges.push(`<span class="inline-flex items-center px-3 py-1.5 rounded-xl border border-stone-200 text-stone-700 text-xs font-medium">${escapeHtml(task.priority)} priority</span>`);
+    }
+
     if (task.projectId && task.projectName) {
         badges.push(`
             <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-200 bg-stone-50 text-stone-500 lowercase text-xs font-medium">

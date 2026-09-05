@@ -1,3 +1,6 @@
+import { getFunctionName } from "convex/server";
+import { createDemoWorkspace, mutateDemo, applyDemoSuggestion, applyDemoBreakdown } from "./state/demo.js";
+import { renderDemoGuide, renderDemoAssistant } from "./views/demo-view.js";
 import { ConvexClient } from "convex/browser";
 import { createAuthClient, formatAuthError } from "./auth/client.js";
 import { api } from "../convex/_generated/api.js";
@@ -40,6 +43,10 @@ import { renderProjectSetupView } from "./views/project-setup-view.js";
 import { renderProjectView } from "./views/project-view.js";
 import { renderTodayView } from "./views/today-view.js";
 import { renderUpcomingView } from "./views/upcoming-view.js";
+
+const isDemo = new URLSearchParams(window.location.search).get("demo") === "1";
+const demoHistory = [];
+const canUseWorkspace = () => isDemo || state.auth.status === "authenticated";
 
 const AUTH_HINT_STORAGE_KEY = "precortex.authHint";
 const ASSISTANT_WIDTH_STORAGE_KEY = "precortex.assistantWidth";
@@ -371,7 +378,7 @@ function clearAuthHint() {
     hasStoredAuthHint = false;
 }
 
-const storedAuthHint = readStoredAuthHint();
+const storedAuthHint = isDemo ? null : readStoredAuthHint();
 if (storedAuthHint) {
     state.auth.user = storedAuthHint;
     hasStoredAuthHint = true;
@@ -517,12 +524,31 @@ function updateTaskModal(animate = false) {
         });
     }
     if (!dialog && lastModalTrigger) {
-        lastModalTrigger.focus();
+        const previous = lastModalTrigger;
         lastModalTrigger = null;
+        requestAnimationFrame(() => {
+            const trigger = previous.isConnected ? previous : Array.from(document.querySelectorAll<HTMLElement>("[data-action]")).find((element) => element.dataset.action === previous.dataset.action && element.dataset.taskId === previous.dataset.taskId);
+            const target = trigger && !trigger.closest("[inert]") ? trigger : document.querySelector<HTMLElement>('[data-action="demo-review"]') || dom.mainView;
+            if (target === dom.mainView) target.setAttribute("tabindex", "-1");
+            target.focus();
+        });
     }
 }
 
 function updateAssistant() {
+    if (isDemo) {
+        dom.assistantTitle.textContent = "Planning example";
+        dom.aiMessages.innerHTML = renderDemoAssistant(state);
+        dom.assistantQuickActions.innerHTML = "";
+        dom.assistantQuickActionsLabel.textContent = "";
+        dom.aiInput.closest(".p-4")?.classList.add("hidden");
+        dom.aiInput.hidden = true;
+        dom.assistantVoiceButton.hidden = true;
+        dom.assistantSendButton.hidden = true;
+        dom.assistantInputHint.textContent = "";
+        return;
+    }
+
     const config =
         state.currentView === "project"
             ? assistantConfigs.project
@@ -607,6 +633,9 @@ function renderChrome() {
     dom.assistantPanel.classList.toggle("lg:scale-[0.98]", !state.assistantOpen);
     dom.assistantPanel.classList.toggle("lg:pointer-events-none", !state.assistantOpen);
 
+    dom.mobileNav.inert = (mobile && !state.mobileNavOpen) || blockingSurfaceOpen;
+    dom.assistantPanel.inert = !state.assistantOpen || hideAssistantSurface || blockingSurfaceOpen;
+    dom.mainPanel.inert = blockingSurfaceOpen || drawersOpen;
     syncDesktopAssistantLayout(mobile, hideAssistantSurface);
 
     const showNavButton = mobile && !state.mobileNavOpen && !blockingSurfaceOpen;
@@ -749,6 +778,7 @@ async function stopVoiceRecording(key: VoiceComposerKey) {
 }
 
 async function startVoiceRecording(key: VoiceComposerKey) {
+    if (isDemo) { showToast("Voice capture is available in an account workspace."); return; }
     if (!supportsVoiceRecording()) {
         showToast("Voice recording is not supported in this browser.");
         return;
@@ -834,7 +864,7 @@ function handleAssistantResizeMove(event: PointerEvent) {
 }
 
 function render() {
-    const shouldKeepShellVisible = state.auth.status === "authenticated" || (state.auth.status === "loading" && hasStoredAuthHint);
+    const shouldKeepShellVisible = canUseWorkspace() || (state.auth.status === "loading" && hasStoredAuthHint);
 
     if (!shouldKeepShellVisible) {
         dom.appShell.classList.add("hidden");
@@ -872,6 +902,10 @@ function render() {
         workspaceCard: dom.workspaceCard,
         authUser: state.auth.user,
     });
+    if (isDemo) {
+        document.getElementById("demoGuide").innerHTML = renderDemoGuide(state, demoHistory.length > 0);
+        dom.workspaceCard.innerHTML = '<div class="demo-workspace-name">precortex <span>sample workspace</span></div>';
+    }
     renderMainView(suppressAnimation);
     updateAssistant();
     updateTaskModal();
@@ -896,7 +930,7 @@ function isModalInputFocused() {
 }
 
 function renderAfterDataSync() {
-    const shouldKeepShellVisible = state.auth.status === "authenticated" || (state.auth.status === "loading" && hasStoredAuthHint);
+    const shouldKeepShellVisible = canUseWorkspace() || (state.auth.status === "loading" && hasStoredAuthHint);
     if (!shouldKeepShellVisible) {
         render();
         return;
@@ -994,6 +1028,7 @@ function subscribeToAppData() {
 }
 
 async function bootstrapAuth() {
+    if (isDemo) return;
     state.auth.status = "loading";
     state.auth.errorMessage = null;
     render();
@@ -1050,6 +1085,7 @@ async function bootstrapAuth() {
 }
 
 async function startLogin() {
+    if (isDemo) { window.location.assign("/?login=1"); return; }
     try {
         if (!authClient) {
             await bootstrapAuth();
@@ -1065,6 +1101,7 @@ async function startLogin() {
 }
 
 async function startLogout() {
+    if (isDemo) { window.location.assign("/"); return; }
     try {
         clearAuthHint();
         resetAppState();
@@ -1105,6 +1142,7 @@ function focusTaskCardTitle(taskId) {
 }
 
 async function sendMessage(textOverride?: string) {
+    if (isDemo) { showToast("This demo uses the prewritten planning example."); return; }
     const view = state.currentView === "project" ? "project" : state.currentView;
     const projectId = view === "project" ? state.selectedProjectId : null;
     const text = (textOverride ?? getComposerDraft("assistant") ?? dom.aiInput.value).trim();
@@ -1186,6 +1224,12 @@ async function sendMessage(textOverride?: string) {
 }
 
 async function runMutation(mutation, args, fallbackMessage = "Could not save change.") {
+    if (isDemo) {
+        try {
+            commitDemo(mutateDemo({ tasks: state.tasks, projects: state.projects }, getFunctionName(mutation), args));
+            return true;
+        } catch (error) { showToast(error.message || fallbackMessage); return null; }
+    }
     if (!convexClient) return null;
 
     try {
@@ -1198,6 +1242,7 @@ async function runMutation(mutation, args, fallbackMessage = "Could not save cha
 }
 
 async function runAction(action, args, fallbackMessage = "Could not complete action.") {
+    if (isDemo) { showToast("Live AI is not called in this demo."); return null; }
     if (!convexClient) return null;
 
     try {
@@ -1549,13 +1594,16 @@ function clearTaskDropIndicators() {
 }
 
 function trapFocus(container: HTMLElement, event: KeyboardEvent) {
-    const focusable = container.querySelectorAll<HTMLElement>(
+    const focusable = Array.from(container.querySelectorAll<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
+    )).filter((element) => !element.matches(":disabled, [hidden], [tabindex='-1']") && !element.closest("[inert]") && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
     if (!focusable.length) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
+    if (!container.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
     } else if (!event.shiftKey && document.activeElement === last) {
@@ -1565,13 +1613,19 @@ function trapFocus(container: HTMLElement, event: KeyboardEvent) {
 }
 
 document.addEventListener("keydown", (event) => {
-    if (state.auth.status !== "authenticated") return;
+    if (!canUseWorkspace()) return;
 
     const target = event.target as HTMLInputElement | HTMLTextAreaElement | null;
 
+    if (event.key === "Escape" && !getSelectedTask(state) && isMobileViewport() && (state.mobileNavOpen || state.assistantOpen)) {
+        closeMobileChrome(); renderChrome(); dom.openNavButton.focus(); return;
+    }
     if (event.key === "Tab") {
         const dialog = dom.taskModal.querySelector('[role="dialog"]') as HTMLElement | null;
         if (dialog) { trapFocus(dialog, event); return; }
+        if (isMobileViewport() && (state.mobileNavOpen || state.assistantOpen)) {
+            trapFocus(state.mobileNavOpen ? dom.mobileNav : dom.assistantPanel, event); return;
+        }
     }
 
     if ((event.key === "Enter" || event.key === " ") && (target as HTMLElement)?.dataset?.action === "open-task") {
@@ -1690,7 +1744,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("input", (event) => {
-    if (state.auth.status !== "authenticated") return;
+    if (!canUseWorkspace()) return;
 
     const target = event.target as HTMLInputElement | HTMLTextAreaElement | null;
     if (!target) return;
@@ -1800,7 +1854,7 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
-    if (state.auth.status !== "authenticated") return;
+    if (!canUseWorkspace()) return;
 
     const target = event.target as HTMLInputElement | HTMLSelectElement | null;
     if (!target) return;
@@ -1902,6 +1956,15 @@ document.addEventListener("click", (event) => {
 
     const { action, taskId, suggestion, view, direction, date, destination } = actionElement.dataset;
 
+    if (action === "start-demo") { window.location.assign("/?demo=1"); return; }
+    if (isDemo && action?.startsWith("demo-")) {
+        handleDemoAction(action, view);
+        return;
+    }
+    if (isDemo && action === "open-project-setup") {
+        showToast("Explore the sample project from the sidebar. New-project AI setup requires an account.");
+        return;
+    }
     if (action === "login") {
         void startLogin();
         return;
@@ -1918,7 +1981,7 @@ document.addEventListener("click", (event) => {
         return;
     }
 
-    if (state.auth.status !== "authenticated") return;
+    if (!canUseWorkspace()) return;
 
     if (action === "switch-view") {
         if (actions.setView(state, view)) {
@@ -1976,7 +2039,7 @@ document.addEventListener("click", (event) => {
                 );
             });
         };
-        if (row) {
+        if (row && !isDemo) {
             row.classList.add("task-removing");
             setTimeout(() => {
                 void doSchedule();
@@ -2235,6 +2298,7 @@ document.addEventListener("click", (event) => {
         cancelVoiceComposer("assistant");
         state.assistantOpen = false;
         renderChrome();
+        dom.reopenAssistantButton.focus();
         return;
     }
 
@@ -2244,6 +2308,7 @@ document.addEventListener("click", (event) => {
             state.assistantOpen = false;
         }
         renderChrome();
+        dom.mobileNav.querySelector<HTMLElement>("button")?.focus();
         return;
     }
 
@@ -2259,13 +2324,14 @@ document.addEventListener("click", (event) => {
             state.mobileNavOpen = false;
         }
         renderChrome();
+        dom.assistantPanel.querySelector<HTMLElement>("button")?.focus();
         return;
     }
 });
 
 dom.assistantResizeHandle.addEventListener("pointerdown", (event) => {
     if (
-        state.auth.status !== "authenticated" ||
+        !canUseWorkspace() ||
         isMobileViewport() ||
         !state.assistantOpen ||
         state.currentView === "project-setup"
@@ -2297,7 +2363,7 @@ document.addEventListener("pointercancel", (event) => {
 });
 
 document.addEventListener("dragstart", (event) => {
-    if (state.auth.status !== "authenticated") return;
+    if (!canUseWorkspace()) return;
 
     const target = event.target as HTMLElement | null;
     const row = target?.closest(".task-row[draggable='true']") as HTMLElement | null;
@@ -2315,7 +2381,7 @@ document.addEventListener("dragstart", (event) => {
 });
 
 document.addEventListener("dragover", (event) => {
-    if (state.auth.status !== "authenticated") return;
+    if (!canUseWorkspace()) return;
 
     const target = event.target as HTMLElement | null;
     const row = target?.closest(".task-row[draggable='true']") as HTMLElement | null;
@@ -2332,7 +2398,7 @@ document.addEventListener("dragover", (event) => {
 });
 
 document.addEventListener("drop", (event) => {
-    if (state.auth.status !== "authenticated") return;
+    if (!canUseWorkspace()) return;
 
     const target = event.target as HTMLElement | null;
     const row = target?.closest(".task-row[draggable='true']") as HTMLElement | null;
@@ -2368,7 +2434,7 @@ document.addEventListener("drop", (event) => {
 });
 
 document.addEventListener("dragend", () => {
-    if (state.auth.status !== "authenticated") return;
+    if (!canUseWorkspace()) return;
 
     clearTaskDropIndicators();
     dragState.taskId = null;
@@ -2388,9 +2454,71 @@ mobileViewport.addEventListener("change", (event) => {
 });
 
 window.addEventListener("resize", () => {
-    if (state.auth.status !== "authenticated" || isMobileViewport()) return;
+    if (!canUseWorkspace() || isMobileViewport()) return;
     renderChrome();
 });
 
-render();
-void bootstrapAuth();
+function commitDemo(next, remember = true) {
+    if (remember) {
+        demoHistory.push(structuredClone({ tasks: state.tasks, projects: state.projects }));
+        if (demoHistory.length > 50) demoHistory.shift();
+    }
+    // Preserve focus through the same render path used for live subscriptions.
+    const active = document.activeElement as HTMLElement;
+    const focusId = active?.id;
+    const focusAction = active?.dataset.action;
+    const focusTask = active?.dataset.taskId;
+    state.tasks = next.tasks;
+    state.projects = next.projects;
+    if (state.modalTaskId && !state.tasks.some((task) => task.id === state.modalTaskId)) actions.closeTaskModal(state);
+    if (state.selectedProjectId && !state.projects.some((project) => project.id === state.selectedProjectId)) actions.setView(state, "inbox");
+    render();
+    const replacement = focusId ? document.getElementById(focusId) : Array.from(document.querySelectorAll<HTMLElement>("[data-action]")).find((element) => element.dataset.action === focusAction && element.dataset.taskId === focusTask && !element.hasAttribute("disabled"));
+    replacement?.focus();
+}
+
+function handleDemoAction(action, view) {
+    if (action === "demo-view") {
+        actions.setView(state, view); closeMobileChrome(); render();
+        const heading = dom.mainView.querySelector("h1");
+        heading?.setAttribute("tabindex", "-1"); heading?.focus();
+    } else if (action === "demo-review") {
+        state.assistantOpen = true; state.mobileNavOpen = false; renderChrome();
+        dom.aiMessages.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
+    } else if (action === "demo-edit") {
+        lastModalTrigger = document.querySelector<HTMLElement>('[data-action="demo-review"]');
+        actions.openTaskModal(state, "demo-venue"); closeMobileChrome(); updateTaskModal(true); renderChrome();
+    } else if (action === "demo-apply" || action === "demo-breakdown") {
+        const workspace = { tasks: state.tasks, projects: state.projects };
+        commitDemo(action === "demo-apply" ? applyDemoSuggestion(workspace) : applyDemoBreakdown(workspace));
+        showToast(action === "demo-apply" ? "High priority, scheduled today. You can edit or undo it." : "Example subtasks added. Open the task to edit them.");
+        dom.aiMessages.querySelector<HTMLElement>('[data-action="demo-edit"]')?.focus();
+    } else if (action === "demo-undo" && demoHistory.length) {
+        commitDemo(demoHistory.pop(), false); showToast("Last demo change undone.");
+    } else if (action === "demo-reset") {
+        dismissToast(); demoHistory.length = 0;
+        resetAppState(); state.auth.status = "unauthenticated";
+        commitDemo(createDemoWorkspace(), false); showToast("Demo reset to its starting point.");
+        document.querySelector<HTMLElement>('[data-action="demo-reset"]')?.focus();
+    }
+}
+
+if (isDemo) {
+    Object.assign(state, createDemoWorkspace());
+    state.auth.status = "unauthenticated";
+    state.auth.user = null;
+    state.assistantOpen = !isMobileViewport();
+    document.body.classList.add("demo-mode");
+    const guide = document.createElement("div");
+    guide.id = "demoGuide";
+    dom.mainPanel.prepend(guide);
+    render();
+} else if (!window.__APP_CONFIG__?.convexUrl && !new URLSearchParams(location.search).has("login")) {
+    state.auth.status = "unauthenticated";
+    render();
+} else {
+    render();
+    void bootstrapAuth().then(() => {
+        if (new URLSearchParams(location.search).get("login") === "1" && state.auth.status === "unauthenticated") void startLogin();
+    });
+}

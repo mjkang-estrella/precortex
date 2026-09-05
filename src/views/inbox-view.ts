@@ -92,7 +92,7 @@ function renderInboxTaskRow(task, index = 0, editingDraft = null) {
     }
 
     return `
-        <div class="task-row group rounded-2xl p-5 flex flex-col xl:flex-row gap-4 cursor-pointer transition-colors ${aiSolvedVisible ? "bg-emerald-50/45 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50/70" : "bg-white border border-stone-200 hover:border-stone-400 hover:bg-stone-50/50"}" data-action="open-task" data-task-id="${task.id}" data-task-list="inbox" draggable="true" style="animation-delay: ${staggerDelay}ms">
+        <div class="task-row group rounded-2xl p-5 flex flex-col xl:flex-row gap-4 cursor-pointer transition-colors ${aiSolvedVisible ? "bg-emerald-50/45 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50/70" : "bg-white border border-stone-200 hover:border-stone-400 hover:bg-stone-50/50"}" data-action="open-task" data-task-id="${task.id}" data-task-list="inbox" draggable="true" tabindex="0" role="button" aria-label="${escapeHtml(task.title)}" style="animation-delay: ${staggerDelay}ms">
             <div class="flex flex-1 items-start gap-4">
                 <button data-action="toggle" data-task-id="${task.id}" class="checkbox-wrapper pt-1 flex-shrink-0" aria-label="mark task complete" type="button">
                     <div class="w-[22px] h-[22px] rounded-full border-2 border-stone-300 flex items-center justify-center transition-all bg-white group-hover:border-stone-400">
